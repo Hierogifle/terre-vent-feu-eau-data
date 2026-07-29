@@ -13,7 +13,10 @@ __pycache__/
 # Les sources brutes (CEMS, BDIFF, CORINE, projections) et les artefacts
 # intermédiaires pèsent plusieurs dizaines de Go. Tout se régénère depuis
 # la base : voir sql/README.md pour la chaîne complète.
-data/
+# ⚠️ `data/*` et non `data/` : git ne descend JAMAIS dans un dossier ignoré,
+# donc aucune exception ne peut y être rouverte ensuite. Ignorer le CONTENU
+# laisse la porte ouverte aux pointeurs DVC (voir plus bas).
+data/*
 *.nc
 
 # ⚠️ EXCEPTION VOLONTAIRE — app/donnees/ (31 Mo) RESTE dans le dépôt.
@@ -21,3 +24,9 @@ data/
 # indéployable : Streamlit Cloud ne peut pas atteindre le PostgreSQL local.
 !app/donnees/
 !app/donnees/**
+
+# ── DVC ──────────────────────────────────────────────────────────────
+# Les pointeurs .dvc DOIVENT etre suivis par git : ce sont eux qui font le
+# lien entre un commit et la version exacte des donnees. Les fichiers
+# pointes, eux, restent hors du depot.
+!/data/*.dvc

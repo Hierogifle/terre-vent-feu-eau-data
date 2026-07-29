@@ -1,0 +1,4 @@
+# tout sauf ce dont l'image a besoin : l'app et son artefact
+*
+!app/risque.py
+!app/donnees

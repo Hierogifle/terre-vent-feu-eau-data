@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# une seule exécution par branche : un push qui suit un push annule le premier
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ══════════════════════════════════════════════════════════════════════
+  # Les tests qui tournent SANS base de données.
+  #
+  # C'est une contrainte de conception, pas une facilité : les garde-fous
+  # anti-fuite les plus importants — l'exclusion de l'année dans le lissage,
+  # l'exposition constante, le refus des NaN silencieux — sont testés sur des
+  # jeux synthétiques de trois communes. Ils tournent donc en CI, à chaque
+  # push, sans dépendre d'un PostgreSQL de 30 Go.
+  # ══════════════════════════════════════════════════════════════════════
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pandas numpy scikit-learn xgboost-cpu pyarrow
+
+      - name: Tests sans base
+        # Les fichiers qui ouvrent une connexion PostgreSQL sont exclus :
+        # ils sont lancés en local avec la base montée.
+        run: pytest tests/ -q --ignore=tests/test_no_leakage.py
+                          --ignore=tests/test_split.py
+
+      - name: Le cadrage interdit certaines colonnes
+        # Vérification indépendante des tests : `surface_m2` et `nb_feux` sont
+        # la cible déguisée (nb_feux > 0 ⟺ y sur 100 % des lignes). S'ils
+        # sortaient de la liste d'exclusion, la PR-AUC frôlerait 1,00 et le
+        # modèle n'aurait aucune valeur.
+        run: |
+          python - <<'PY'
+          import re, pathlib, sys
+          s = pathlib.Path("src/tvfed/modeles.py").read_text(encoding="utf-8")
+          m = re.search(r'^FUITE\s*=\s*\[(.*?)\]', s, re.M | re.S)
+          assert m, "la liste FUITE a disparu de modeles.py"
+          for c in ("nb_feux", "surface_m2"):
+              assert c in m.group(1), f"{c} n'est plus exclu des features"
+          print("FUITE :", m.group(1).strip())
+          PY
+
+  # ══════════════════════════════════════════════════════════════════════
+  # L'image de l'application se construit-elle, et répond-elle ?
+  # ══════════════════════════════════════════════════════════════════════
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construction
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: tvfed-app:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: L'application démarre et répond
+        # Un `docker build` qui réussit ne prouve rien : l'artefact peut être
+        # absent, l'ordre des features faux, le modèle illisible. On lance et
+        # on interroge la sonde de santé.
+        run: |
+          docker run -d --name app -p 8501:8501 tvfed-app:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8501/_stcore/health > /dev/null; then
+              echo "l'application répond après ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::pas de réponse après 30 s"
+          docker logs app
+          exit 1
+
+      - name: Taille de l'image
+        # ⚠️ Le paquet `xgboost` standard tire 419 Mo de bibliothèques CUDA,
+        # inutiles dans un conteneur sans GPU — l'image était à 2,1 Go. Ce
+        # seuil empêche la régression si quelqu'un remet `xgboost` tout court.
+        run: |
+          T=$(docker image inspect tvfed-app:ci --format='{{.Size}}')
+          echo "image : $((T/1000000)) Mo"
+          [ "$T" -lt 1500000000 ] || { echo "::error::image > 1,5 Go"; exit 1; }

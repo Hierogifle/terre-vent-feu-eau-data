@@ -39,5 +39,23 @@ services:
       timeout: 5s
       retries: 20
 
+
+
+
+  # ── l'application ────────────────────────────────────────────────────
+  # Profil `app` : elle ne démarre PAS avec `docker compose up -d`, qui ne
+  # lance que la base pour le travail de pipeline. Pour la servir :
+  #     docker compose --profile app up -d --build
+  app:
+    build: .
+    container_name: tvfed-app
+    profiles: ["app"]
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+    # aucun `depends_on` : l'application lit un artefact de fichiers, elle
+    # n'a jamais besoin de la base. C'est délibéré — c'est ce qui la rend
+    # déployable sur une plateforme sans PostgreSQL.
+
 volumes:
   pgdata:
