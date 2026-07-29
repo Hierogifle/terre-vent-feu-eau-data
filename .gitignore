@@ -1,0 +1,23 @@
+# ── secrets ──────────────────────────────────────────────────────────
+.cdsapirc
+.env
+
+# ── environnement ────────────────────────────────────────────────────
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ── données ──────────────────────────────────────────────────────────
+# Les sources brutes (CEMS, BDIFF, CORINE, projections) et les artefacts
+# intermédiaires pèsent plusieurs dizaines de Go. Tout se régénère depuis
+# la base : voir sql/README.md pour la chaîne complète.
+data/
+*.nc
+
+# ⚠️ EXCEPTION VOLONTAIRE — app/donnees/ (31 Mo) RESTE dans le dépôt.
+# C'est l'artefact que lit l'application. L'exclure la rendrait
+# indéployable : Streamlit Cloud ne peut pas atteindre le PostgreSQL local.
+!app/donnees/
+!app/donnees/**

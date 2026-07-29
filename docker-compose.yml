@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: tvfed-db
+    environment:
+      POSTGRES_DB: tvfed
+      POSTGRES_USER: tvfed
+      POSTGRES_PASSWORD: tvfed
+    ports:
+      # 5433 côté hôte : évite tout conflit avec un PostgreSQL local
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # monté en lecture seule : permet le COPY côté serveur, ~10x plus rapide
+      # que des INSERT ligne à ligne depuis Python
+      - ./data:/data:ro
+    # 4 Go : les requêtes parallèles sur la grille de 253 M lignes épuisaient
+    # 1 Go (« could not resize shared memory segment »)
+    shm_size: 4gb
+    command:
+      # réglages pour un usage analytique mono-utilisateur : on privilégie
+      # le débit des gros chargements et des index sur la concurrence
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - work_mem=256MB
+      - -c
+      - maintenance_work_mem=1GB
+      - -c
+      - max_wal_size=8GB
+      - -c
+      - checkpoint_timeout=30min
+      - -c
+      - synchronous_commit=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tvfed -d tvfed"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pgdata:

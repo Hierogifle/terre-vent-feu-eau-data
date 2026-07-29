@@ -1,0 +1,38 @@
+# Périmètre et découpage temporel — le seul endroit où ces choix sont écrits.
+# Changer ce fichier et rejouer le pipeline suffit à produire un autre jeu.
+
+perimetre:
+  nom: france_metropole
+  # DOM exclus : hors de la bbox météo européenne et absents de CORINE
+  exclure_departements_prefixes: ["97", "98"]
+
+periode:
+  debut: "2006-01-01"   # rupture de collecte BDIFF : couverture nationale à partir de 2006
+  fin: "2025-12-31"     # dernière date disponible (BDIFF 28/12/2025, CEMS 31/12/2025)
+
+# Split temporel strict — aucune information du futur dans l'entraînement
+split:
+  train: ["2006-01-01", "2019-12-31"]
+  val:   ["2020-01-01", "2022-12-31"]   # NON échantillonnée : sert à la calibration
+  test:  ["2023-01-01", "2025-12-31"]   # évaluée UNE SEULE FOIS
+
+echantillonnage:
+  # 100 % des positifs conservés ; négatifs tirés au ratio ci-dessous.
+  # Tirage DÉTERMINISTE par hash(code_insee, date) : les échantillons à
+  # différents ratios sont emboîtés, donc comparables.
+  ratio_negatifs: 10
+  applique_a: ["train"]        # val et test restent INTÉGRAUX
+
+voisinage:
+  rayons_km: [10, 20, 50]
+  rayon_max_km: 50             # au-delà, la table devient inutilement grosse
+
+# Volumétrie attendue — sert d'assertion dans sql/80_checks.sql.
+# Mesurée sur les fichiers réels, pas reprise de Plan.md (qui annonce
+# ~80 000 positifs pour un périmètre où il y en a 30 307).
+attendu:
+  communes: 34734
+  jours: 7305
+  lignes_grille: 253731570
+  positifs: 48677
+  taux_positifs: 0.000192

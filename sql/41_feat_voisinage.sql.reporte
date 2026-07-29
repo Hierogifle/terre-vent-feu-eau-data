@@ -1,0 +1,50 @@
+-- ═══════════════════════════════════════════════════════════════════════
+-- Contagion spatiale — les feux du voisinage sur les 30 jours précédents.
+--
+-- C'est la feature qui encode l'intuition « une commune sans historique mais
+-- entourée de communes qui brûlent est exposée ». Le FWI, purement
+-- météorologique, ne peut pas la connaître.
+--
+-- ⚠️ ORDRE DES OPÉRATIONS CRITIQUE : on agrège les feux par (cible, jour)
+-- AVANT de les projeter sur les 30 jours. Dans l'autre sens, on
+-- multiplierait 52 809 feux × 549 voisins × 30 jours ≈ 870 M lignes.
+-- Ici : 2,8 M paires à 20 km, groupées puis projetées.
+--
+-- ⚠️ Décalage strictement ≥ 1 jour : le jour J lui-même n'entre jamais dans
+-- la fenêtre. Sans ça, un incendie traversant 5 communes ferait que chaque
+-- commune « voit » ses voisines brûler le jour même — corrélation ~1 avec
+-- la cible, PR-AUC magnifique, et modèle inutilisable en production.
+-- ═══════════════════════════════════════════════════════════════════════
+
+DROP TABLE IF EXISTS feat_voisinage;
+
+CREATE TABLE feat_voisinage AS
+WITH contrib AS (
+    SELECT v.code_insee                                        AS cible,
+           f.date_alerte,
+           count(*) FILTER (WHERE v.dist_m < 10000)            AS n10,
+           count(*) FILTER (WHERE v.dist_m < 20000)            AS n20,
+           count(*)                                            AS n50,
+           -- pondération par l'inverse de la distance : un feu à 3 km pèse
+           -- plus qu'un feu à 45 km
+           sum(1.0 / (v.dist_m / 1000.0 + 1))                  AS w50
+    FROM fait_feu f
+    JOIN ref_voisinage v ON v.voisin = f.code_insee
+    WHERE f.code_insee IS NOT NULL
+    GROUP BY 1, 2
+),
+projete AS (
+    SELECT cible, date_alerte + d AS date, n10, n20, n50, w50
+    FROM contrib
+    CROSS JOIN generate_series(1, 30) AS d      -- ← borne basse à 1 = passé strict
+)
+SELECT cible                AS code_insee,
+       date,
+       sum(n10)::int        AS feux_voisins_10km_30j,
+       sum(n20)::int        AS feux_voisins_20km_30j,
+       sum(n50)::int        AS feux_voisins_50km_30j,
+       sum(w50)::real       AS feux_voisins_ponderes_30j
+FROM projete
+GROUP BY 1, 2;
+
+ALTER TABLE feat_voisinage ADD PRIMARY KEY (code_insee, date);

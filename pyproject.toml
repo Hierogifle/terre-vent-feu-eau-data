@@ -1,0 +1,45 @@
+[project]
+name = "tvfed"
+version = "0.1.0"
+description = "Terre, Vent, Feu, Eau, Data — prédiction du risque de feu de forêt par commune et par jour"
+requires-python = ">=3.12"
+dependencies = [
+    # données
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "xarray>=2024.1",
+    "netCDF4>=1.6",
+    # géo
+    "geopandas>=1.0",
+    "shapely>=2.0",
+    "pyproj>=3.6",
+    "scipy>=1.13",
+    # base de données
+    "psycopg[binary]>=3.2",
+    "sqlalchemy>=2.0",
+    # modélisation
+    "scikit-learn>=1.5",
+    "xgboost>=2.1",
+    "shap>=0.46",
+    # app + utilitaires
+    "streamlit>=1.40",
+    "holidays>=0.60",
+    "pyyaml>=6.0",
+    "joblib>=1.4",
+    "matplotlib>=3.9",
+    "seaborn>=0.13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ipykernel>=6.29"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

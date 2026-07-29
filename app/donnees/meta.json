@@ -1,0 +1,63 @@
+{
+  "modele": "XGBoost C — physique pur, 41 features",
+  "pourquoi": "seul modèle déployable : ne dépend d'aucune donnée indisponible en temps réel. La BDIFF ne publie pas l'année en cours.",
+  "test": {
+    "pr_auc": 0.0106,
+    "lift": 63.7,
+    "periode": "2023-2025",
+    "lignes": 38068464,
+    "feux": 6322
+  },
+  "modele_a": {
+    "pr_auc": 0.0156,
+    "lift": 93.8,
+    "note": "meilleur, mais exige l'historique récent des feux"
+  },
+  "fenetre_demo": [
+    "2025-05-01",
+    "2025-10-31"
+  ],
+  "features": [
+    "fwi",
+    "ffmc",
+    "dmc",
+    "dc",
+    "bui",
+    "isi",
+    "kbdi",
+    "erc",
+    "danger_effis",
+    "fwi_j1",
+    "ffmc_j1",
+    "clc_millesime",
+    "part_foret",
+    "part_feuillus",
+    "part_coniferes",
+    "part_melangees",
+    "part_landes",
+    "part_maquis",
+    "part_veg_mutation",
+    "part_veg_clairsemee",
+    "part_combustible",
+    "part_agricole",
+    "part_artificialise",
+    "log_population",
+    "log_densite",
+    "log_superficie",
+    "altitude_moy",
+    "amplitude_altitude",
+    "grille_densite",
+    "distance_cote_km",
+    "doy",
+    "mois",
+    "jour_semaine",
+    "est_weekend",
+    "est_ferie",
+    "est_14_juillet",
+    "est_15_aout",
+    "sin_doy",
+    "cos_doy",
+    "sin_mois",
+    "cos_mois"
+  ]
+}
