@@ -13,9 +13,21 @@
     "lift": 93.8,
     "note": "meilleur, mais exige l'historique récent des feux"
   },
-  "fenetre_demo": [
-    "2025-05-01",
-    "2025-10-31"
+  "climatologie": [
+    2006,
+    2019
+  ],
+  "horizon": [
+    2026,
+    2100
+  ],
+  "decennies": [
+    "1973-1979",
+    "1980-1989",
+    "1990-1999",
+    "2000-2009",
+    "2010-2019",
+    "2020-2025"
   ],
   "features": [
     "fwi",

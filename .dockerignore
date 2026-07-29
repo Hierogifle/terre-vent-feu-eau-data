@@ -1,4 +1,9 @@
-# tout sauf ce dont l'image a besoin : l'app et son artefact
+# Tout est exclu, puis on rouvre ce dont l'image a besoin.
+# L'entraînement, les notebooks, la base et les 2,4 Go d'artefacts n'ont
+# rien à faire dans une image qui se contente de servir des prédictions.
 *
-!app/risque.py
+!app/noyau.py
+!app/Carte.py
+!app/pages
 !app/donnees
+!.streamlit

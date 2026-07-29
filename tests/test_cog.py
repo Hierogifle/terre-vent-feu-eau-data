@@ -12,6 +12,13 @@ sys.path.insert(0, "src")
 from tvfed.io.cog import codes_ambigus, remapper, table_passage  # noqa: E402
 from tvfed.paths import COMMUNES_CSV  # noqa: E402
 
+# Ces tests lisent le référentiel INSEE, qui vit dans `data/` — suivi par DVC,
+# donc absent d'un dépôt fraîchement cloné. On saute plutôt que d'échouer :
+# une donnée non versionnée qui manque n'est pas une régression du code.
+pytestmark = pytest.mark.skipif(
+    not COMMUNES_CSV.exists(),
+    reason="référentiel INSEE absent — `dvc pull` pour le récupérer")
+
 
 @pytest.fixture(scope="module")
 def codes_actuels():

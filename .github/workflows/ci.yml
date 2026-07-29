@@ -34,13 +34,18 @@ jobs:
       - name: Dépendances
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pandas numpy scikit-learn xgboost-cpu pyarrow
+          # psycopg et pyyaml sont nécessaires à l'IMPORT des modules, même
+          # pour les tests qui ne touchent pas la base : `tvfed.clustering`
+          # fait `from . import db`, qui importe psycopg au chargement. C'est
+          # ce qui faisait échouer la collecte au premier passage.
+          pip install pytest pandas numpy scikit-learn pyarrow pyyaml
+          pip install xgboost-cpu "psycopg[binary]"
 
       - name: Tests sans base
         # Les fichiers qui ouvrent une connexion PostgreSQL sont exclus :
         # ils sont lancés en local avec la base montée.
-        run: pytest tests/ -q --ignore=tests/test_no_leakage.py
-                          --ignore=tests/test_split.py
+        run: |
+          pytest tests/ -q --ignore=tests/test_no_leakage.py --ignore=tests/test_split.py
 
       - name: Le cadrage interdit certaines colonnes
         # Vérification indépendante des tests : `surface_m2` et `nb_feux` sont

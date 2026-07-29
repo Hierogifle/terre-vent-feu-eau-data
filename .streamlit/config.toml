@@ -1,0 +1,23 @@
+# ⚠️ THÈME EXPLICITE, ET C'EST UNE CORRECTION.
+# Sans ce fichier, Streamlit suit le thème du système : sur une machine en
+# mode sombre, le texte noir des composants personnalisés devenait illisible
+# sur fond noir. Un thème figé garantit les mêmes contrastes partout.
+[theme]
+base = "light"
+primaryColor = "#e34948"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f2f1ec"
+textColor = "#0b0b0b"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+# ⚠️ Streamlit ne réimporte pas toujours les modules locaux quand ils
+# changent : l'application gardait `noyau.py` en mémoire et plantait sur une
+# colonne ajoutée entre-temps. Ce réglage force la réimportation.
+fastReruns = true

@@ -82,14 +82,30 @@ def ratios() -> pd.DataFrame:
             "SELECT DISTINCT m.cell_id, m.lat, m.lon FROM ref_maille m "
             "JOIN ref_commune r USING (cell_id) WHERE r.in_perimetre", cx)
 
-    arbre = cKDTree(np.column_stack([lat, lon]))
-    _, idx = arbre.query(np.column_stack([mailles.lat, mailles.lon]))
+    # ⚠️ ON NE CHERCHE QUE PARMI LES CELLULES QUI ONT UNE VALEUR.
+    # La grille CORDEX couvre l'Europe, mer comprise, et le FWI y est NaN.
+    # Une première version interrogeait toutes les cellules puis retombait sur
+    # k = 1,0 quand la plus proche était vide : 59 mailles françaises sur 1 131
+    # — surtout littorales — se retrouvaient ainsi avec « aucun réchauffement »,
+    # silencieusement. Le repli était pire que le problème : il fabriquait une
+    # absence de signal là où il fallait chercher un peu plus loin.
+    hist_plat = c["historique"].ravel()
+    valide = np.isfinite(hist_plat) & (hist_plat > 0)
+    arbre = cKDTree(np.column_stack([lat[valide], lon[valide]]))
+    dist, k_loc = arbre.query(np.column_stack([mailles.lat, mailles.lon]))
+    idx = np.flatnonzero(valide)[k_loc]
 
     out = mailles[["cell_id"]].copy()
-    hist = c["historique"].ravel()[idx]
-    for s in ("rcp4_5", "rcp8_5"):
-        fut = c[s].ravel()[idx]
-        out[f"k_{s}"] = np.where(hist > 0, fut / hist, 1.0)
+    out["dist_deg"] = dist          # traçabilité : à quelle distance a-t-on pris
+    hist = hist_plat[idx]
+    # toutes les cartes présentes dans l'archive : un scénario × un horizon
+    for cle in c.files:
+        if cle == "historique":
+            continue
+        out[f"k_{cle}"] = c[cle].ravel()[idx] / hist
+    cols = [c_ for c_ in out.columns if c_.startswith("k_")]
+    assert cols, "aucune carte de projection dans cartes_fwi.npz"
+    assert np.isfinite(out[cols]).all().all(), "des rapports non finis subsistent"
     return out
 
 
@@ -136,6 +152,11 @@ def main() -> None:
 
     print("rapports climatiques par maille…")
     k = ratios()
+    # ⚠️ Les cartes portent maintenant (scénario, horizon). La migration
+    # décrit le milieu du siècle : on retient la climatologie centrée 2058,
+    # la plus proche de l'horizon 2041-2055 que ce module documente.
+    k = k.rename(columns={f"k_{s}_2058": f"k_{s}"
+                          for s in ("rcp2_6", "rcp4_5", "rcp8_5")})
     j = jours_projetes(k)
     k = k.merge(j, on="cell_id")
     with db.connexion() as cx:

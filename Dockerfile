@@ -36,8 +36,14 @@ RUN pip install \
 
 FROM deps AS app
 
-# le code, puis les données : l'ordre compte pour le cache de couches
-COPY app/risque.py       /app/app/risque.py
+# le code, puis les données : l'ordre compte pour le cache de couches.
+# ⚠️ L'application est MULTIPAGE — `app/pages/` et le thème `.streamlit/`
+# doivent suivre. Une version antérieure ne copiait qu'un fichier unique et
+# l'image ne se construisait plus après la restructuration.
+COPY .streamlit/         /app/.streamlit/
+COPY app/noyau.py        /app/app/noyau.py
+COPY app/Carte.py        /app/app/Carte.py
+COPY app/pages/          /app/app/pages/
 COPY app/donnees/        /app/app/donnees/
 
 # Streamlit écrit ses statistiques d'usage et son cache ; sans utilisateur
@@ -54,7 +60,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request; \
       urllib.request.urlopen('http://localhost:8501/_stcore/health')"
 
-CMD ["streamlit", "run", "app/risque.py", \
+CMD ["streamlit", "run", "app/Carte.py", \
      "--server.port=8501", \
      "--server.address=0.0.0.0", \
      "--server.headless=true", \

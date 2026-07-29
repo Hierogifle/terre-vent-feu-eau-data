@@ -69,13 +69,28 @@ JEU = "sis-tourism-fire-danger-indicators"
 # On prend donc 15 saisons de part et d'autre, centrées sur 2048, contre
 # 20 pour l'historique. Le delta devient une différence de climatologies,
 # pas de deux tirages.
-HORIZON = ["2041_2045", "2046_2050", "2051_2055"]
-DEMANDES = {
-    "historical": {"experiment": "historical", "period": ["1986_1990", "1991_1995",
-                                                          "1996_2000", "2001_2005"]},
-    "rcp4_5": {"experiment": "rcp4_5", "period": HORIZON},
-    "rcp8_5": {"experiment": "rcp8_5", "period": HORIZON},
-}
+# ⚠️ TROIS HORIZONS, PAS UN — ET C'EST CE QUI REND LES SCÉNARIOS LISIBLES.
+# À 2050 les RCP ne diffèrent que de 6 % : le CO₂ déjà émis détermine les
+# vingt-cinq prochaines années quoi qu'on fasse. L'éventail ne s'ouvre
+# qu'après, et le jeu de données va jusqu'en 2098.
+#
+# Trois fenêtres de 15 saisons chacune, pour capter la COURBURE des
+# trajectoires — RCP4.5 s'aplatit, RCP8.5 accélère. Deux points seuls
+# forceraient une droite et effaceraient précisément ce qui distingue les
+# scénarios.
+H_PROCHE = ["2031_2035", "2036_2040", "2041_2045"]     # centré 2038
+H_MILIEU = ["2051_2055", "2056_2060", "2061_2065"]     # centré 2058
+H_FIN = ["2086_2090", "2091_2095", "2096_2098"]        # centré 2092
+HORIZONS = {"proche": (H_PROCHE, 2038), "milieu": (H_MILIEU, 2058),
+            "fin": (H_FIN, 2092)}
+SCENARIOS = ["rcp2_6", "rcp4_5", "rcp8_5"]
+
+DEMANDES = {"historical": {"experiment": "historical",
+                           "period": ["1986_1990", "1991_1995",
+                                      "1996_2000", "2001_2005"]}}
+for _s in SCENARIOS:
+    for _h, (_p, _) in HORIZONS.items():
+        DEMANDES[f"{_s}__{_h}"] = {"experiment": _s, "period": _p}
 
 
 # ⚠️ DEUX PORTAILS DIFFÉRENTS, ET C'EST UN PIÈGE.
