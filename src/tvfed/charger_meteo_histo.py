@@ -18,7 +18,12 @@ la charger sans réserve, et elle sert à une chose que 2006-2025 ne permet pas 
 
 Vingt ans ne font pas une tendance climatique — on l'a mesuré, la pente du FWI
 sur 2006-2025 n'est pas significative (p = 0,13), la variabilité d'une année à
-l'autre écrase le signal. Sur cinquante-trois ans, c'est une autre histoire.
+l'autre écrase le signal.
+
+Sur cinquante-trois ans, elle l'est très largement : **+45 % de FWI moyen,
+p < 0,0001**, et **+17,5 jours de danger élevé par an**. La pente est du même
+ordre sur toutes les fenêtres (+0,04 à +0,06/an) — ce qui manquait n'était pas
+le signal, c'était la longueur de la série pour le sortir du bruit.
 
 ⚠️ Ces années n'entrent NI dans la grille NI dans l'entraînement. Elles ne
 servent qu'à l'affichage et au contexte. Le modèle reste celui du gel.

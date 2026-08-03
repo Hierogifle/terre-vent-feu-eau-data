@@ -102,12 +102,18 @@ m3.metric("Jours très élevés", f"{d1.extremes:.1f} j/an",
           f"{d1.extremes - d0.extremes:+.1f} j")
 
 st.info(
-    "**Et pourtant le nombre de feux ne monte pas.** Mesuré sur 2006-2025 : "
-    "le FWI progresse de +24 % et les jours de danger de +59 %, mais les feux "
-    "restent stables (pente +3 % sur 20 ans, p = 0,89). La prévention et les "
-    "moyens de lutte absorbent la dégradation climatique. La dérive résiduelle "
-    "— ce que la météo n'explique pas — va dans le sens d'une amélioration "
-    "(−20 % sur 20 ans) mais n'est pas significative (p = 0,27).")
+    "**Le danger monte, et c'est établi.** Sur les 53 années de mesures : "
+    "**+45 % de FWI moyen** (p < 0,0001) et **+17,5 jours de danger élevé "
+    "par an** (p = 0,00005).\n\n"
+    "⚠️ Il a fallu cinquante ans pour l'établir. Sur 2006-2025 seulement, la "
+    "même pente ressort **non significative** (p = 0,13) : la variabilité "
+    "d'une année à l'autre — 4,34 en 2021 contre 6,90 en 2020 — noie "
+    "complètement le signal de fond sur deux décennies.\n\n"
+    "**Et pourtant le nombre de feux ne monte pas** : +3,7 feux par an, "
+    "p = 0,89. La prévention et les moyens de lutte absorbent la dégradation "
+    "climatique. Réserve honnête : les feux ne sont observés que depuis 2006 "
+    "(la BDIFF n'est pas homogène avant), on compare donc une tendance météo "
+    "sur 53 ans à une stabilité sur 20.")
 
 st.divider()
 

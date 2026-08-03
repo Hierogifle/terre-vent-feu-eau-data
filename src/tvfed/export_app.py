@@ -146,8 +146,10 @@ def _climatologie() -> pd.DataFrame:
 def _decennies() -> pd.DataFrame:
     """FWI moyen et jours de danger par maille et par décennie, 1973-2025.
 
-    C'est ce qui permet de montrer une TENDANCE. Sur vingt ans la pente du
-    FWI n'est pas significative (p = 0,13) ; sur cinquante-trois, elle se voit.
+    C'est ce qui permet de montrer une TENDANCE, et la longueur compte :
+    sur 2006-2025 la pente du FWI n'est pas significative (p = 0,13), sur
+    1973-2025 elle l'est à p < 0,0001 (+45 %). Même pente, autre verdict —
+    la variabilité interannuelle noie le signal sur une fenêtre courte.
     """
     cas = " ".join(
         f"WHEN extract(year FROM date) BETWEEN {a} AND {b} THEN '{a}-{b}'"

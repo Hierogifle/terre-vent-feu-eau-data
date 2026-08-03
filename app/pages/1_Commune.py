@@ -184,8 +184,10 @@ if len(D) >= 2:
     st.caption(
         "⚠️ Une commune n'est pas une tendance climatique : la variabilité "
         "d'une décennie à l'autre est forte, et une hausse ici ne prouve rien "
-        "à elle seule. Sur l'ensemble de la France et sur 20 ans, la pente du "
-        "FWI n'est pas significative (p = 0,13).")
+        "à elle seule. Sur l'ensemble de la France en revanche, la hausse est "
+        "établie : **+45 % de FWI moyen entre 1973 et 2025** (p < 0,0001). "
+        "Il a fallu cinquante ans pour l'établir — sur vingt ans seulement, "
+        "la variabilité d'une année à l'autre noie le signal (p = 0,13).")
 
 st.divider()
 
