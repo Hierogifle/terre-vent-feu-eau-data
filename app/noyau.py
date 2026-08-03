@@ -73,6 +73,22 @@ def hex_rgb(h: str) -> list[int]:
     return [int(h[i:i + 2], 16) for i in (1, 3, 5)]
 
 
+def couleur_effis(poids) -> np.ndarray:
+    """Un poids dans [0,1] → une couleur RGB, sur le dégradé officiel EFFIS.
+
+    Interpolation linéaire entre les six couleurs de l'échelle. On la calcule
+    ici plutôt que de laisser deck.gl le faire : `get_fill_color` accepte une
+    couleur par entité, et une colonne de couleurs déjà résolue évite d'avoir
+    à transporter une échelle et un domaine jusqu'au navigateur.
+    """
+    p = np.clip(np.asarray(poids, dtype=np.float64), 0, 1)
+    pal = np.array([hex_rgb(c) for c in COUL_EFFIS], dtype=np.float64)
+    x = p * (len(pal) - 1)
+    i = np.clip(np.floor(x).astype(int), 0, len(pal) - 2)
+    t = (x - i)[:, None]
+    return (pal[i] * (1 - t) + pal[i + 1] * t).round().astype(np.uint8)
+
+
 # ════════════════════════════════════════════════════════════════════════
 #  chargement — en cache, l'artefact ne change jamais en cours de session
 # ════════════════════════════════════════════════════════════════════════
@@ -123,6 +139,27 @@ def meteo_observee() -> pd.DataFrame:
     d["fwi_j1"] = g.fwi.shift(1).astype("float32")
     d["ffmc_j1"] = g.ffmc.shift(1).astype("float32")
     return d[d.date >= "2023-01-01"].reset_index(drop=True)
+
+
+@st.cache_data(show_spinner="chargement des contours communaux…")
+def contours() -> pd.DataFrame:
+    """Un anneau par ligne, prêt pour `pydeck.PolygonLayer`.
+
+    ⚠️ La conversion en listes Python est faite UNE FOIS, ici, et mise en
+    cache. deck.gl attend `[[lon, lat], …]` ; refaire cette conversion à
+    chaque interaction coûterait plusieurs secondes pour 34 778 anneaux.
+    """
+    d = pd.read_parquet(DON / "contours.parquet")
+    d["polygone"] = [np.column_stack([lo, la]).tolist()
+                     for lo, la in zip(d.lon, d.lat)]
+    return d[["code_insee", "polygone"]]
+
+
+@st.cache_data(show_spinner=False)
+def contours_manquants() -> list[str]:
+    """Les communes sans contour — comptées, jamais devinées."""
+    f = DON / "contours_manquants.json"
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
 
 
 @st.cache_data(show_spinner=False)

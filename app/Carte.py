@@ -125,23 +125,47 @@ with st.sidebar:
                       label_visibility="collapsed")
 
 # ════════════════════════════════════════════════════════════════════════
-def carte(D: pd.DataFrame, titre: str, vue=None):
-    """Une carte de chaleur, aux couleurs EFFIS."""
+def poids_de(D: pd.DataFrame) -> pd.Series:
+    """La grandeur à colorier, normalisée dans [0,1].
+
+    ⚠️ Le risque est normalisé **par rapport à la journée**, pas dans
+    l'absolu : la carte répond à « où regarder aujourd'hui ». Le FWI, lui, se
+    lit sur l'échelle EFFIS, dont 50 est le seuil extrême — donc pas de
+    normalisation relative, sinon un jour calme paraîtrait alarmant.
+    """
     if couche.startswith("Risque"):
-        D = D.assign(poids=D.score / D.score.max())
-    else:
-        D = D.assign(poids=(D.fwi / 50).clip(0, 1))
+        return D.score / D.score.max()
+    return (D.fwi / 50).clip(0, 1)
+
+
+def couche_communes(D: pd.DataFrame):
+    """Les communes en APLAT, chacune à la couleur de son risque.
+
+    ⚠️ On joint les contours aux scores par `code_insee`, jamais par
+    position : une commune en plusieurs morceaux occupe plusieurs lignes de
+    contour, et un `merge` sur l'index les décalerait silencieusement.
+    """
+    C = N.contours().merge(
+        D.assign(poids=poids_de(D))[["code_insee", "poids", "nom"]],
+        on="code_insee", how="inner")
+    C["couleur"] = list(N.couleur_effis(C.poids.to_numpy()))
+    return pdk.Layer(
+        "PolygonLayer", C[["polygone", "couleur", "nom"]],
+        get_polygon="polygone", get_fill_color="couleur",
+        stroked=False, filled=True, extruded=False,
+        pickable=True, auto_highlight=True)
+
+
+def carte(D: pd.DataFrame, titre: str, vue=None, hauteur=460):
+    """La France, commune par commune, aux couleurs EFFIS."""
     st.markdown(f"**{titre}**")
     st.pydeck_chart(pdk.Deck(
         map_style="light",
         initial_view_state=vue or pdk.ViewState(latitude=46.6, longitude=2.4,
                                                 zoom=4.5),
-        layers=[pdk.Layer(
-            "HeatmapLayer", D[["lon", "lat", "poids"]],
-            get_position=["lon", "lat"], get_weight="poids",
-            radius_pixels=30, intensity=1.0, threshold=0.03,
-            color_range=[N.hex_rgb(c) for c in N.COUL_EFFIS], opacity=.85)]),
-        height=420, width="stretch")
+        layers=[couche_communes(D)],
+        tooltip={"text": "{nom}"}),
+        height=hauteur, width="stretch")
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -306,22 +330,13 @@ d.metric("Communes en danger extrême",
          f"{(R.danger_effis >= 5).sum():,}".replace(",", " "))
 
 # ── la carte ─────────────────────────────────────────────────────────────
-if couche.startswith("Risque"):
-    poids = R.score
-    # normalisé sur la journée : la carte répond à « où regarder aujourd'hui »
-    R["poids"] = poids / poids.max()
-    legende = "risque prédit par le modèle, relatif à la journée"
-else:
-    R["poids"] = (R.fwi / 50).clip(0, 1)
-    legende = "FWI — 50 correspond au seuil « extrême » d'EFFIS"
+legende = ("risque prédit par le modèle, relatif à la journée"
+           if couche.startswith("Risque")
+           else "FWI — 50 correspond au seuil « extrême » d'EFFIS")
 
-couches = [pdk.Layer(
-    "HeatmapLayer", R[["lon", "lat", "poids"]],
-    get_position=["lon", "lat"], get_weight="poids",
-    radius_pixels=34, intensity=1.0, threshold=0.03,
-    color_range=[N.hex_rgb(c) for c in N.COUL_EFFIS], opacity=.85)]
+couches = [couche_communes(R)]
 
-# la commune cherchée, épinglée par-dessus
+# la commune cherchée, cerclée par-dessus l'aplat
 trouvees = N.chercher(q) if q else None
 vue = pdk.ViewState(latitude=46.6, longitude=2.4, zoom=4.7)
 if trouvees is not None and len(trouvees):
@@ -329,14 +344,24 @@ if trouvees is not None and len(trouvees):
     ligne = R[R.code_insee == sel.code_insee]
     couches.append(pdk.Layer(
         "ScatterplotLayer", ligne, get_position=["lon", "lat"],
-        get_fill_color=[20, 20, 20], get_radius=7000, opacity=1,
-        stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=2))
-    vue = pdk.ViewState(latitude=float(sel.lat), longitude=float(sel.lon), zoom=8)
+        get_fill_color=[0, 0, 0, 0], get_radius=4000,
+        stroked=True, get_line_color=[20, 20, 20], line_width_min_pixels=2.5))
+    vue = pdk.ViewState(latitude=float(sel.lat), longitude=float(sel.lon),
+                        zoom=9)
 
 st.pydeck_chart(pdk.Deck(map_style="light", layers=couches,
-                         initial_view_state=vue), width='stretch')
-st.caption(f"Carte de chaleur — {legende}. "
-           f"Échelle de couleurs EFFIS : vert → jaune → orange → rouge → noir.")
+                         initial_view_state=vue, tooltip={"text": "{nom}"}),
+                height=560, width='stretch')
+
+_manq = len(N.contours_manquants())
+st.caption(
+    f"Chaque commune est colorée sur **toute sa surface** — {legende}. "
+    f"Échelle EFFIS : vert → jaune → orange → rouge → noir. "
+    f"Survolez une commune pour la nommer."
+    + (f" ⚠️ {_manq} communes sur {N.nb(len(R))} n'ont pas de contour dans le "
+       f"référentiel géographique et n'apparaissent pas : leur code a changé "
+       f"entre le millésime du fond de carte et le COG 2026."
+       if _manq else ""))
 
 # ── le résultat de la recherche ─────────────────────────────────────────
 if q:
