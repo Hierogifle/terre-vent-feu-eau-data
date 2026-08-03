@@ -211,5 +211,9 @@ qui corrige le décalage de prior du downsampling. Le train est réduit à
 ## Documentation
 
 - [`sql/README.md`](sql/README.md) — schéma détaillé de la base
+- [`docs/series-temporelles.md`](docs/series-temporelles.md) — cours ACF, PACF,
+  ADF et SARIMAX, pour savoir quoi penser des résultats
 - `notebook/data-*.ipynb` — audit qualité de chaque source
 - `notebook/data-all.ipynb` — analyse croisée des cinq sources
+- `notebook/series-lstm.ipynb` — l'axe temporel : stationnarité, ordres,
+  SARIMAX, tendance sur 53 ans, et pourquoi le LSTM perd contre le modèle C
