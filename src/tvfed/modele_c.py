@@ -103,25 +103,28 @@ def main() -> None:
     print(f"  entraîné en {time.time() - t0:.0f} s")
 
     print(f"\névaluation sur {args.split} intégral…")
-    scores, cibles, dates, n, t0 = [], [], [], 0, time.time()
+    # `date` seule ne suffit pas à identifier une ligne : il faut la commune.
+    # Sans les deux, ce fichier n'est comparable à aucun autre — la requête
+    # d'assemblage n'a pas d'ORDER BY. Cf. `comparer`.
+    scores, cibles, cles, n, t0 = [], [], [], 0, time.time()
     for bloc in matrices.parcourir(args.split):
         bloc = clustering.appliquer(bloc, taux)
         X = pd.DataFrame(prep.transform(bloc), columns=prep.colonnes_)[garde]
         scores.append(m.predict_proba(X)[:, 1].astype(np.float32))
         cibles.append(bloc[CIBLE].to_numpy(np.int8))
-        dates.append(bloc["date"].to_numpy().astype("datetime64[D]"))
+        cles.append(bloc[["code_insee", "date"]])
         n += len(bloc)
         if n % 10_000_000 < len(bloc):
             print(f"   {n:>12,} lignes   {time.time() - t0:5.0f} s")
 
     pr, y = np.concatenate(scores), np.concatenate(cibles)
-    dt = np.concatenate(dates)
     ap = average_precision_score(y, pr)
     base = y.mean()
 
-    pd.DataFrame({"date": dt, "p_c": pr, "y": y}).to_parquet(
-        PROCESSED / f"scores_c_{args.split}.parquet", index=False,
-        compression="zstd")
+    d = pd.concat(cles, ignore_index=True).assign(p_c=pr, y=y)
+    dt = d.date.to_numpy().astype("datetime64[D]")
+    d.to_parquet(PROCESSED / f"scores_c_{args.split}.parquet", index=False,
+                 compression="zstd")
 
     ref = pd.read_csv(PROCESSED / "resultat_test.csv") if args.split == "test" else None
     print("\n" + "═" * 66)

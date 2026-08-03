@@ -151,6 +151,25 @@ revanche « taux moyen de la commune sur toute la période » lit le futur.
 Sur le train échantillonné, le taux de positifs est de 9,12 % au lieu de
 0,019 % — un facteur 480 qui empoisonnerait tout prior bayésien.
 
+**4. Deux modèles ne se comparent que sur `(code_insee, date)`, jamais sur la
+position de la ligne.**
+
+`sql/50_matrice.sql` n'a pas d'`ORDER BY` : l'ordre dans lequel PostgreSQL
+renvoie les 38 M lignes dépend du plan d'exécution et des workers parallèles,
+et **change d'une exécution à l'autre**. Deux fichiers de prédictions issus de
+deux exécutions ont la même taille, le même nombre de feux, et un ordre
+différent — les comparer ligne à ligne donne un écart faux sans lever la
+moindre erreur.
+
+Le cas s'est produit : la première comparaison LSTM ↔ XGBoost annonçait
+**−97 %** au lieu de **−52 %**. Les fichiers `predictions_val_v3/dart/mlp`
+partageaient, eux, le même ordre — par chance, pas par contrat.
+
+Ajouter un `ORDER BY` coûterait un tri de 38 M lignes larges à chaque
+parcours. On a donc retenu l'autre parade : **tout fichier de prédictions
+porte ses clés**, `tvfed.comparer.aligner()` trie et vérifie, et
+`tests/test_comparaison.py` refuse un fichier sans clés.
+
 ---
 
 ## Périmètre et volumétrie

@@ -107,18 +107,21 @@ def main() -> None:
 
     # ── évaluation sur la validation intégrale ──────────────────────────
     print("\névaluation sur la validation intégrale…")
-    scores, cibles, n, t0 = [], [], 0, time.time()
+    # cf. modele_v3 : sans (commune, date), un fichier de prédictions n'est
+    # comparable à aucun autre — la requête n'a pas d'ORDER BY.
+    scores, cibles, cles, n, t0 = [], [], [], 0, time.time()
     for bloc in matrices.parcourir("val"):
         bloc = clustering.appliquer(bloc, taux)
         scores.append(m.predict_proba(prep.transform(bloc))[:, 1].astype(np.float32))
         cibles.append(bloc[CIBLE].to_numpy(np.int8))
+        cles.append(bloc[["code_insee", "date"]])
         n += len(bloc)
         if n % 10_000_000 < len(bloc):
             print(f"   {n:>12,} lignes   {time.time() - t0:5.0f} s")
 
     pr, yv = np.concatenate(scores), np.concatenate(cibles)
     ap = average_precision_score(yv, pr)
-    pd.DataFrame({"p_dart": pr, "y": yv}).to_parquet(
+    pd.concat(cles, ignore_index=True).assign(p_dart=pr, y=yv).to_parquet(
         PROCESSED / "predictions_val_dart.parquet", index=False, compression="zstd")
 
     base = pd.read_csv(PROCESSED / "baselines.csv").pr_auc.max()

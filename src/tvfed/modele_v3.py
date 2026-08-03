@@ -112,11 +112,15 @@ def main() -> None:
 
     # ── évaluation sur la validation intégrale ──────────────────────────
     print("\névaluation sur la validation intégrale…")
-    scores, cibles, n, t0 = [], [], 0, time.time()
+    # les clés sont indispensables : `sql/50_matrice.sql` n'a pas d'ORDER BY,
+    # donc l'ordre des lignes change d'une exécution à l'autre et deux
+    # fichiers de prédictions ne sont comparables que par (commune, date).
+    scores, cibles, cles, n, t0 = [], [], [], 0, time.time()
     for bloc in matrices.parcourir("val"):
         bloc = clustering.appliquer(bloc, taux)
         scores.append(m.predict_proba(prep.transform(bloc))[:, 1].astype(np.float32))
         cibles.append(bloc[CIBLE].to_numpy(np.int8))
+        cles.append(bloc[["code_insee", "date"]])
         n += len(bloc)
         if n % 10_000_000 < len(bloc):
             print(f"   {n:>12,} lignes   {time.time() - t0:5.0f} s")
@@ -125,7 +129,7 @@ def main() -> None:
     yv = np.concatenate(cibles)
     ap = average_precision_score(yv, pr)
 
-    pd.DataFrame({"p_xgb_v3": pr, "y": yv}).to_parquet(
+    pd.concat(cles, ignore_index=True).assign(p_xgb_v3=pr, y=yv).to_parquet(
         PROCESSED / "predictions_val_v3.parquet", index=False, compression="zstd")
 
     # ── importances, pour savoir si les nouvelles colonnes servent ──────

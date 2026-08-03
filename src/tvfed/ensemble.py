@@ -43,12 +43,17 @@ import itertools
 import numpy as np
 import pandas as pd
 
+from .comparer import aligner
 from .paths import PROCESSED
 
 SOURCES = {
-    "XGBoost v3": ("predictions_val_v3.parquet", "p_xgb_v3"),
-    "DART": ("predictions_val_dart.parquet", "p_dart"),
-    "MLP": ("predictions_val_mlp.parquet", "p_mlp"),
+    # `scores_val.parquet` (produit par `tvfed.scores --split val`) porte les
+    # trois modèles ET les clés, marqués en UNE passe sur la même énumération
+    # de lignes. C'est la seule source dont l'alignement est garanti par
+    # construction plutôt que par chance.
+    "XGBoost v3": ("scores_val.parquet", "xgb_v3"),
+    "DART": ("scores_val.parquet", "dart"),
+    "MLP": ("scores_val.parquet", "mlp"),
 }
 
 
@@ -62,12 +67,14 @@ def _rangs(p: np.ndarray) -> np.ndarray:
 def main() -> None:
     from sklearn.metrics import average_precision_score
 
-    d, y = {}, None
-    for nom, (f, c) in SOURCES.items():
-        t = pd.read_parquet(PROCESSED / f)
-        d[nom] = t[c].to_numpy(np.float32)
-        if y is None:
-            y = t["y"].to_numpy(np.int8)
+    # alignement sur (commune, date), pas sur la position : la requête
+    # d'assemblage n'a pas d'ORDER BY, deux fichiers issus de deux
+    # exécutions n'ont pas le même ordre de lignes. Cf. `comparer`.
+    t = aligner(SOURCES, garder_cles=True)
+    cles = t[["code_insee", "date"]]
+    t = t.drop(columns=["code_insee", "date", "commune"])
+    y = t.pop("y").to_numpy(np.int8)
+    d = {n: t[n].to_numpy(np.float32) for n in t.columns}
     base = y.mean()
     print(f"validation : {len(y):,} lignes, {y.sum():,} feux ({base:.4%})\n")
 
@@ -103,7 +110,7 @@ def main() -> None:
 
     combo, ap = meilleur
     e = np.mean([Rg[c] for c in combo], axis=0)
-    pd.DataFrame({"p_ens": e, "y": y}).to_parquet(
+    cles.assign(p_ens=e, y=y).to_parquet(
         PROCESSED / "predictions_val_ensemble.parquet", index=False,
         compression="zstd")
     pd.DataFrame(lignes).to_csv(PROCESSED / "ensembles.csv", index=False)
