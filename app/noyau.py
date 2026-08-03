@@ -29,8 +29,18 @@ DON = Path(__file__).parent / "donnees"
 
 # ── charte, reprise des notebooks ────────────────────────────────────────
 INK, MUTED, GRID = "#0b0b0b", "#6b6963", "#e1e0d9"
-FOND = "#fcfcfb"
+FOND, GRIS = "#fcfcfb", "#c3c2b7"
 BLEU, ORANGE, ROUGE, VERT, VIOLET = "#2a78d6", "#eb6834", "#e34948", "#1baf7a", "#4a3aa7"
+
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+        "août", "septembre", "octobre", "novembre", "décembre"]
+
+
+def date_fr(d: pd.Timestamp) -> str:
+    """« 15 août 2024 ». `strftime('%B')` rendrait « August » : la locale du
+    serveur n'est pas celle du lecteur, et on ne la configure pas depuis une
+    application web."""
+    return f"{d.day} {MOIS[d.month - 1]} {d.year}"
 
 # seuils et couleurs officiels EFFIS
 SEUILS = [5.2, 11.2, 21.3, 38, 50]
@@ -78,13 +88,110 @@ def meta() -> dict:
     return json.loads((DON / "meta.json").read_text(encoding="utf-8"))
 
 
+@st.cache_data(show_spinner="chargement de la météo observée…")
+def meteo_observee() -> pd.DataFrame:
+    """La météo RÉELLE de 2023-2025, chargée seulement si on la demande.
+
+    ⚠️ 33 Mo sur disque, ~92 Mo en mémoire. Le mode courant de l'application
+    n'en a pas besoin : il sert la climatologie décalée, qui suffit à parler
+    d'un jour ordinaire sous un climat donné. Seul le mode **rétrospectif** la
+    réclame, parce qu'il prétend montrer les prédictions réellement évaluées
+    sur le test. `@st.cache_data` la charge donc au premier usage, pas au
+    démarrage.
+    """
+    d = pd.read_parquet(DON / "meteo_test.parquet")
+    d["date"] = pd.to_datetime(d.date)
+    # le décalage d'un jour se recalcule ici plutôt que d'être stocké : deux
+    # colonnes de plus auraient coûté 9 Mo dans le dépôt pour une opération
+    # qui prend une milliseconde. Le 31/12/2022 est présent exprès, pour que
+    # le 1er janvier 2023 ait bien une veille.
+    d = d.sort_values(["cell_id", "date"])
+    g = d.groupby("cell_id")
+    d["fwi_j1"] = g.fwi.shift(1).astype("float32")
+    d["ffmc_j1"] = g.ffmc.shift(1).astype("float32")
+    return d[d.date >= "2023-01-01"].reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False)
+def jours_feu() -> pd.DataFrame:
+    """(commune, date, nombre de feux) — la brique de l'historique du v3."""
+    d = pd.read_parquet(DON / "jours_feu.parquet")
+    d["date"] = pd.to_datetime(d.date)
+    return d
+
+
+@st.cache_data(show_spinner=False)
+def tendances() -> pd.DataFrame:
+    """Les pentes de fond, CALCULÉES puis exportées.
+
+    ⚠️ Ne jamais réécrire ces chiffres à la main dans une page. Une version
+    antérieure affichait « +45 %, p < 0,0001 », valeur qui ne correspondait à
+    aucune agrégation réelle et a survécu des semaines parce qu'elle était en
+    dur dans une chaîne de caractères.
+    """
+    return pd.read_csv(DON / "tendances.csv")
+
+
 @st.cache_resource(show_spinner=False)
-def modele():
+def modele(nom: str = "C"):
+    """Le modèle demandé. « C » est le déployable, « v3 » le rétrospectif."""
     from xgboost import XGBClassifier
 
     m = XGBClassifier()
-    m.load_model(DON / "modele_c.json")
+    m.load_model(DON / ("modele_c.json" if nom == "C" else "modele_v3.json"))
     return m
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  quand a-t-on le DROIT d'afficher le modèle v3 ?
+# ════════════════════════════════════════════════════════════════════════
+# Le v3 est meilleur que C sur le test — 93,8× contre 63,7×. Mais son score
+# ne veut dire quelque chose que sur une période qui n'a informé AUCUNE
+# décision. Il n'y en a qu'une : le test.
+#
+# Afficher v3 ailleurs produirait des cartes flatteuses et malhonnêtes, sans
+# qu'aucune erreur ne se déclenche. D'où cette fonction, et le fait que les
+# bornes viennent de `meta.json` plutôt que d'être écrites ici.
+
+MOTIFS = {
+    "train": (
+        "**{a}-{b} — le modèle v3 a appris ces années.** Afficher son score "
+        "ici montrerait ce qu'il a mémorisé, pas ce qu'il sait prédire. "
+        "Les cartes paraîtraient excellentes, pour la pire des raisons."),
+    "val": (
+        "**{a}-{b} — la validation.** Elle a servi à choisir les "
+        "hyperparamètres par Optuna, à sélectionner le modèle, à ajuster la "
+        "calibration et à faire tourner le bootstrap apparié. Un score "
+        "affiché ici serait optimiste pour une raison invisible à l'œil."),
+    "avenir": (
+        "**Au-delà de {b} — le modèle v3 est impossible.** Il a besoin des "
+        "feux des 365 derniers jours ; la BDIFF ne publie pas l'année en "
+        "cours, et personne ne connaîtra jamais les feux de 2049."),
+    "avant": (
+        "**Avant {a} — pas d'historique exploitable.** Le v3 a besoin de "
+        "365 jours de feux antérieurs, et la BDIFF n'est pas homogène avant "
+        "2006."),
+}
+
+
+def periode(an: int) -> str:
+    """Dans quelle partition tombe cette année ? train, val, test, avenir…"""
+    s = meta()["splits"]
+    for nom in ("train", "val", "test"):
+        if s[nom][0] <= an <= s[nom][1]:
+            return nom
+    return "avenir" if an > s["test"][1] else "avant"
+
+
+def v3_autorise(an: int) -> tuple[bool, str]:
+    """(autorisé, message). Le refus est l'argument, pas une limitation."""
+    p = periode(an)
+    if p == "test":
+        return True, ""
+    s = meta()["splits"]
+    a, b = (s["train"][0], s["test"][1])
+    return False, MOTIFS[p].format(a=s.get(p, [a, b])[0] if p in s else a,
+                                   b=s.get(p, [a, b])[1] if p in s else b)
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -114,13 +221,30 @@ INDICES = ["fwi", "ffmc", "dmc", "dc", "bui", "isi", "kbdi", "erc",
 
 
 def meteo_du_jour(d: pd.Timestamp, scenario: str = "rcp8_5",
-                  variante: str = "k") -> pd.DataFrame:
-    """La météo de chaque maille pour cette date. Observée ou projetée.
+                  variante: str = "k", observee: bool = False) -> pd.DataFrame:
+    """La météo de chaque maille pour cette date.
 
-    ⚠️ Au-delà de 2025 ce n'est PAS une prévision : c'est le cycle saisonnier
-    de 2006-2019, dont le niveau est multiplié par le facteur de l'année. Un
-    « 2 août 2032 » est donc un 2 août ORDINAIRE sous le climat de 2032.
+    Deux régimes, et la distinction est essentielle :
+
+    `observee=False` (défaut) — le cycle saisonnier 2006-2019, dont le NIVEAU
+        est multiplié par le facteur de l'année. Un « 2 août 2032 » est un
+        2 août ORDINAIRE sous le climat de 2032. C'est le seul objet
+        défendable pour parler d'avenir.
+
+    `observee=True` — la météo RÉELLEMENT mesurée ce jour-là. Disponible
+        uniquement sur 2023-2025, et réservée au mode rétrospectif : c'est
+        elle qu'ont vue les modèles pendant l'évaluation test.
     """
+    if observee:
+        m = meteo_observee()
+        j = m[m.date == d].copy()
+        if j.empty:
+            raise ValueError(
+                f"la météo observée n'est exportée que pour 2023-2025 — "
+                f"{d.date()} est hors de cette fenêtre")
+        j["danger_effis"] = np.digitize(j.fwi, SEUILS).astype(int)
+        return j.drop(columns=["date"])
+
     clim = climatologie()
     doy = min(int(d.dayofyear), 366)
     j = clim[clim.doy == doy].copy()
@@ -145,13 +269,86 @@ def meteo_du_jour(d: pd.Timestamp, scenario: str = "rcp8_5",
     return j
 
 
-def predire(d: pd.Timestamp, scenario: str = "rcp8_5") -> pd.DataFrame:
-    """Score de chaque commune pour cette date."""
-    com, m, mt = communes(), modele(), meta()
-    X = com.merge(meteo_du_jour(d, scenario), on="cell_id", how="inner")
+LAGS = ["feux_commune_7j", "feux_commune_30j", "feux_commune_90j",
+        "feux_commune_365j", "jours_depuis_dernier_feu"]
+
+
+@st.cache_data(show_spinner=False)
+def historique(d: pd.Timestamp) -> pd.DataFrame:
+    """Les 5 features d'historique du modèle v3, au jour `d`, PASSÉ STRICT.
+
+    Réplique exacte de `sql/40_feat_lags.sql` :
+
+        fenêtre    les jours-feu de [d − 365, d − 1]. Le jour d lui-même
+                   n'entre JAMAIS — sans cette borne, `feux_commune_7j`
+                   contiendrait le feu qu'on cherche à prédire, et c'est la
+                   fuite la plus classique du domaine
+        comptage   on somme les FEUX déclarés, pas les communes-jours : deux
+                   feux le même jour dans la même commune comptent deux
+        défauts    0 pour les compteurs, **9999** pour
+                   `jours_depuis_dernier_feu` — la valeur qu'utilise le
+                   COALESCE de `sql/50_matrice.sql`. Mettre 0 signifierait
+                   « il a brûlé aujourd'hui », soit l'inverse du sens voulu.
+
+    C'est ce recalcul qui évite d'embarquer les 253 M lignes de la grille :
+    49 130 jours-feu suffisent à reconstruire la colonne pour n'importe quelle
+    date.
+    """
+    jf = jours_feu()
+    fen = jf[(jf.date >= d - pd.Timedelta(days=365))
+             & (jf.date <= d - pd.Timedelta(days=1))].copy()
+
+    codes = communes().code_insee
+    if fen.empty:
+        h = pd.DataFrame(0, index=codes, columns=LAGS, dtype=float)
+        h["jours_depuis_dernier_feu"] = 9999.0
+        return h.rename_axis("code_insee").reset_index()
+
+    fen["decalage"] = (d - fen.date).dt.days
+    g = fen.groupby("code_insee")
+    h = pd.DataFrame({
+        "feux_commune_7j": fen[fen.decalage <= 7].groupby("code_insee").n.sum(),
+        "feux_commune_30j": fen[fen.decalage <= 30].groupby("code_insee").n.sum(),
+        "feux_commune_90j": fen[fen.decalage <= 90].groupby("code_insee").n.sum(),
+        "feux_commune_365j": g.n.sum(),
+        "jours_depuis_dernier_feu": g.decalage.min(),
+    }).reindex(codes)
+    h[LAGS[:4]] = h[LAGS[:4]].fillna(0)
+    h["jours_depuis_dernier_feu"] = h.jours_depuis_dernier_feu.fillna(9999)
+    return h.rename_axis("code_insee").reset_index()
+
+
+def predire(d: pd.Timestamp, scenario: str = "rcp8_5", nom: str = "C",
+            observee: bool = False) -> pd.DataFrame:
+    """Score de chaque commune pour cette date, par le modèle demandé.
+
+    ⚠️ `nom="v3"` n'est légitime que sur le jeu de TEST — voir `v3_autorise`.
+    On lève plutôt que de rendre une carte flatteuse et fausse.
+
+    ⚠️ `observee=True` sert la météo réellement mesurée. Le mode rétrospectif
+    doit l'utiliser POUR LES DEUX MODÈLES : comparer v3 sur météo réelle à C
+    sur climatologie mesurerait la différence de météo, pas de modèle.
+    """
+    com, mt = communes(), meta()
+    X = com.merge(meteo_du_jour(d, scenario, observee=observee),
+                  on="cell_id", how="inner")
     for k, v in calendrier(d).items():
         X[k] = v
-    X["score"] = m.predict_proba(X[mt["features"]].astype(float))[:, 1]
+
+    if nom == "v3":
+        ok, motif = v3_autorise(d.year)
+        if not ok:
+            raise ValueError(motif)
+        X = X.merge(historique(d), on="code_insee", how="left")
+        # ⚠️ ORDRE, PAS NOMS. Le v3 a été entraîné sur un tableau NumPy et ne
+        # porte aucun nom de colonne : XGBoost ne vérifiera RIEN. Servir les
+        # features dans un autre ordre produirait des scores plausibles et
+        # entièrement faux. `features_v3` est l'ordre d'entraînement exact.
+        colonnes = mt["features_v3"]
+    else:
+        colonnes = mt["features"]
+
+    X["score"] = modele(nom).predict_proba(X[colonnes].astype(float))[:, 1]
     X["rang"] = X.score.rank(pct=True)
     return X
 

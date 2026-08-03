@@ -146,10 +146,13 @@ def _climatologie() -> pd.DataFrame:
 def _decennies() -> pd.DataFrame:
     """FWI moyen et jours de danger par maille et par décennie, 1973-2025.
 
-    C'est ce qui permet de montrer une TENDANCE, et la longueur compte :
-    sur 2006-2025 la pente du FWI n'est pas significative (p = 0,13), sur
-    1973-2025 elle l'est à p < 0,0001 (+45 %). Même pente, autre verdict —
-    la variabilité interannuelle noie le signal sur une fenêtre courte.
+    C'est ce qui permet de montrer une TENDANCE, et la longueur compte : la
+    variabilité interannuelle noie le signal sur une fenêtre courte.
+
+    ⚠️ Les CHIFFRES de cette tendance sont calculés par `_tendances()` et
+    exportés. Ne pas les recopier ici : une version antérieure de cette
+    docstring et de l'application annonçait « +45 %, p < 0,0001 », valeur qui
+    ne correspondait à aucune agrégation réelle.
     """
     cas = " ".join(
         f"WHEN extract(year FROM date) BETWEEN {a} AND {b} THEN '{a}-{b}'"
@@ -165,6 +168,110 @@ def _decennies() -> pd.DataFrame:
                      / count(DISTINCT extract(year FROM date)) AS jours_tres_eleve
             FROM fait_meteo
             WHERE CASE {cas} END IS NOT NULL
+            GROUP BY 1, 2 ORDER BY 1, 2""", c)
+
+
+def _tendances() -> pd.DataFrame:
+    """Les pentes de fond, calculées — jamais recopiées.
+
+    ⚠️ POURQUOI CETTE FONCTION EXISTE.
+    L'application affichait « **+45 % de FWI moyen (p < 0,0001)** » et « sur
+    2006-2025 la pente est non significative (p = 0,13) ». Ces deux valeurs
+    étaient écrites en dur, et fausses : le calcul donne **+58 % en moyenne
+    annuelle** et **+62 % en juin-septembre**, sur 1973-2025.
+
+    Un chiffre recopié à la main finit toujours par diverger de son calcul.
+    On l'exporte donc, et l'application le lit.
+
+    ⚠️ L'AMPLEUR DÉPEND DE L'AGRÉGATION, et c'est précisément ce que l'absence
+    de définition avait permis d'oublier : l'été se réchauffe plus vite que
+    l'année entière. On calcule les deux et on dit laquelle on retient.
+    """
+    from scipy import stats
+
+    requetes = {
+        "FWI moyen annuel": (
+            "SELECT extract(year FROM date)::int AS x, avg(fwi) AS y "
+            "FROM fait_meteo GROUP BY 1 ORDER BY 1"),
+        "FWI moyen juin-septembre": (
+            "SELECT extract(year FROM date)::int AS x, avg(fwi) AS y "
+            "FROM fait_meteo WHERE extract(month FROM date) BETWEEN 6 AND 9 "
+            "GROUP BY 1 ORDER BY 1"),
+        "jours de danger élevé (FWI > 21,3)": (
+            "SELECT extract(year FROM date)::int AS x, "
+            "count(*) FILTER (WHERE fwi > 21.3)::float "
+            "/ count(DISTINCT cell_id) AS y "
+            "FROM fait_meteo GROUP BY 1 ORDER BY 1"),
+        "communes-jours en feu": (
+            "SELECT extract(year FROM date)::int AS x, "
+            "count(*) FILTER (WHERE y)::float AS y FROM grille GROUP BY 1 "
+            "ORDER BY 1"),
+    }
+    lignes = []
+    with db.connexion() as c:
+        for nom, sql in requetes.items():
+            d = pd.read_sql(sql, c)
+            r = stats.linregress(d.x, d.y)
+            debut = r.intercept + r.slope * d.x.iloc[0]
+            span = int(d.x.iloc[-1] - d.x.iloc[0])
+            lignes.append({
+                "serie": nom, "an_min": int(d.x.iloc[0]),
+                "an_max": int(d.x.iloc[-1]), "n_ans": span,
+                "pente": r.slope, "p": r.pvalue,
+                "valeur_debut": debut, "valeur_fin": debut + r.slope * span,
+                "variation_pct": 100 * r.slope * span / debut if debut else np.nan,
+                "significatif": bool(r.pvalue < 0.05)})
+    return pd.DataFrame(lignes)
+
+
+def _meteo_test() -> pd.DataFrame:
+    """La météo RÉELLE du jeu de test, jour par jour.
+
+    ⚠️ POURQUOI ELLE EST NÉCESSAIRE, ALORS QU'ON A DÉJÀ LA CLIMATOLOGIE.
+    Le reste de l'application sert un cycle saisonnier dont seul le NIVEAU
+    change d'une année à l'autre : « un 15 août ordinaire sous le climat de
+    2024 ». C'est le bon objet pour parler d'avenir, où personne ne connaît
+    la météo.
+
+    Mais le mode rétrospectif prétend montrer *les prédictions du modèle sur
+    le test* — celles qui valent 93,8× le hasard. Les produire à partir d'une
+    météo lissée donnerait des scores qui ne correspondent à AUCUN modèle
+    évalué : ni au test publié, ni à rien d'autre. On sert donc la vraie
+    météo, et le mode rétrospectif devient exactement reproductible.
+
+    On garde le **31 décembre 2022** : `fwi_j1` et `ffmc_j1` du 1er janvier
+    2023 ont besoin de la veille. Ces deux colonnes ne sont pas stockées —
+    un décalage d'un jour se recalcule au chargement en une ligne, et les
+    écrire coûterait 9 Mo dans un dépôt que d'autres vont cloner.
+    """
+    with db.connexion() as c:
+        m = pd.read_sql("""
+            SELECT cell_id, date, fwi, ffmc, dmc, dc, bui, isi, kbdi, erc
+            FROM fait_meteo
+            WHERE date BETWEEN '2022-12-31' AND '2025-12-31'
+            ORDER BY cell_id, date""", c)
+    m["cell_id"] = m.cell_id.astype("int16")
+    for col in ("fwi", "ffmc", "dmc", "dc", "bui", "isi", "kbdi", "erc"):
+        m[col] = m[col].astype("float32")
+    return m
+
+
+def _jours_feu() -> pd.DataFrame:
+    """Un jour-feu = (commune, date, nombre de feux déclarés ce jour-là).
+
+    C'est la brique qui permet de reconstruire à la volée les 5 features
+    d'historique du modèle v3 — `feux_commune_7j/30j/90j/365j` et
+    `jours_depuis_dernier_feu`. Réplique exacte du CTE `jours_feu` de
+    `sql/40_feat_lags.sql` : on compte les LIGNES BDIFF, donc deux feux le
+    même jour dans la même commune comptent deux.
+
+    Quelques dizaines de milliers de lignes — rien, comparé aux 253 M de la
+    grille qu'il aurait fallu embarquer pour servir les mêmes colonnes.
+    """
+    with db.connexion() as c:
+        return pd.read_sql("""
+            SELECT code_insee, date_alerte AS date, count(*)::int AS n
+            FROM fait_feu WHERE code_insee IS NOT NULL
             GROUP BY 1, 2 ORDER BY 1, 2""", c)
 
 
@@ -318,6 +425,15 @@ def main() -> None:
     com["risque_fond"] = com.code_insee.map(ref.taux_cluster_lisse)
     com["risque_commune"] = com.code_insee.map(ref.taux_commune_lisse)
 
+    # ⚠️ LES NOMS EXACTS ATTENDUS PAR LE MODÈLE v3. `risque_fond` et
+    # `risque_commune` portent déjà ces valeurs, mais XGBoost vérifie les NOMS
+    # des colonnes : servir v3 exige les libellés d'entraînement. Ce sont les
+    # taux `an_exclue == 0`, c'est-à-dire ajustés sur le train complet —
+    # exactement ceux qu'a utilisés l'évaluation test.
+    for col in ("taux_cluster_lisse", "taux_commune_lisse",
+                "ratio_commune_cluster"):
+        com[col] = com.code_insee.map(ref[col])
+
     mig = pd.read_parquet(PROCESSED / "migration_clusters.parquet")
     for s in ("rcp4_5", "rcp8_5"):
         com[f"cluster_{s}"] = com.code_insee.map(mig[f"cluster_{s}"])
@@ -353,8 +469,60 @@ def main() -> None:
     fac.to_parquet(APP / "facteurs.parquet", index=False, compression="zstd")
     print(f"  {len(fac):,} lignes ({AN_DEBUT}-{AN_FIN}, 2 scénarios)")
 
-    shutil.copy(PROCESSED / "modele_c.json", APP / "modele_c.json")
-    shutil.copy(PROCESSED / "importances_c.csv", APP / "importances_c.csv")
+    print("tendances de fond…")
+    ten = _tendances()
+    ten.to_csv(APP / "tendances.csv", index=False)
+    for _, r in ten.iterrows():
+        print(f"   {r.serie:36s} {r.variation_pct:+6.0f} % sur {r.n_ans} ans   "
+              f"p = {r.p:.1e}  {'' if r.significatif else '(non significatif)'}")
+
+    # ── SHAP du modèle C, sous-échantillonné ────────────────────────────
+    # 60 000 lignes × 41 features font 10 Mo par tableau. Un nuage de points
+    # de 60 000 valeurs est illisible de toute façon : 15 000 suffisent à
+    # dessiner la même distribution, pour un quart du poids.
+    N_SHAP = 15_000
+    src = PROCESSED / "shap_c_alea.npy"
+    if src.exists():
+        rng = np.random.default_rng(0)
+        for nom in ("alea", "sommet"):
+            v = np.load(PROCESSED / f"shap_c_{nom}.npy")
+            X = pd.read_parquet(PROCESSED / f"shap_c_{nom}_X.parquet")
+            idx = rng.choice(len(v), min(N_SHAP, len(v)), replace=False)
+            np.save(APP / f"shap_c_{nom}.npy", v[idx])
+            X.iloc[idx].reset_index(drop=True).to_parquet(
+                APP / f"shap_c_{nom}_X.parquet", index=False,
+                compression="zstd")
+            print(f"  SHAP {nom:7s} {len(idx):,} lignes sur {len(v):,}")
+        shutil.copy(PROCESSED / "shap_c_colonnes.json",
+                    APP / "shap_c_colonnes.json")
+        shutil.copy(PROCESSED / "fond_dice.parquet", APP / "fond_dice.parquet")
+    else:
+        print("   ⚠️ SHAP du modèle C absent — lancer tvfed.explications")
+
+    print("météo observée du test, pour le mode rétrospectif…")
+    mt_test = _meteo_test()
+    mt_test.to_parquet(APP / "meteo_test.parquet", index=False,
+                       compression="zstd")
+    print(f"  {len(mt_test):,} lignes ({mt_test.cell_id.nunique()} mailles × "
+          f"{mt_test.date.nunique()} jours de 2023-2025)")
+
+    print("jours-feu, pour reconstruire l'historique du modèle v3…")
+    jf = _jours_feu()
+    jf.to_parquet(APP / "jours_feu.parquet", index=False, compression="zstd")
+    print(f"  {len(jf):,} jours-feu, {int(jf.n.sum()):,} feux, "
+          f"{jf.date.min()} → {jf.date.max()}")
+
+    for f in ("modele_c.json", "importances_c.csv", "modele_v3.json",
+              "importances_v3.csv", "comparaison_appariee.csv",
+              "pr_auc_val.csv", "transfert_spatial.csv", "series_adf.csv",
+              "series_sarimax.csv", "test_par_annee.csv", "modeles_lstm.csv",
+              "best_params_lstm.json", "calibration_v3.csv",
+              "baselines.csv", "modeles_ensemble.csv", "resultat_test.csv",
+              "modele_c_test.csv"):
+        if (PROCESSED / f).exists():
+            shutil.copy(PROCESSED / f, APP / f)
+        else:
+            print(f"   ⚠️ {f} absent — la page qui l'utilise devra le gérer")
 
     # ⚠️ L'ORDRE DES FEATURES EST CELUI DE L'ENTRAÎNEMENT, PAS DE L'IMPORTANCE.
     # XGBoost vérifie les noms ET leur ordre. Exporter la liste triée par
@@ -362,6 +530,30 @@ def main() -> None:
     from xgboost import XGBClassifier
     _m = XGBClassifier()
     _m.load_model(APP / "modele_c.json")
+
+    # ⚠️ LE MODÈLE v3 N'A PAS DE NOMS DE FEATURES.
+    # `modele_v3.py` l'entraîne sur `prep.transform(train)`, qui rend un
+    # tableau NumPy : XGBoost n'a donc mémorisé aucun nom, et
+    # `get_booster().feature_names` vaut None. Le modèle C, lui, est entraîné
+    # sur un DataFrame et porte ses noms.
+    #
+    # Conséquence pour l'application : servir v3 exige de présenter les
+    # colonnes dans l'ORDRE EXACT de l'entraînement, sans quoi la prédiction
+    # sera silencieusement fausse — aucune vérification de nom ne la
+    # rattrapera. On exporte donc cet ordre, pris à sa source : la
+    # `Preparation` ajustée sur le train.
+    from .modeles import Preparation
+
+    train = clustering.appliquer(
+        pd.read_parquet(PROCESSED / "train.parquet"), taux)
+    colonnes_v3 = list(Preparation().fit(train).colonnes_)
+    _v3 = XGBClassifier()
+    _v3.load_model(APP / "modele_v3.json")
+    if _v3.n_features_in_ != len(colonnes_v3):
+        raise ValueError(
+            f"modele_v3 attend {_v3.n_features_in_} features, la préparation "
+            f"en produit {len(colonnes_v3)} — relancer tvfed.modele_v3")
+    print(f"  v3 : {len(colonnes_v3)} features, ordre d'entraînement conservé")
 
     (APP / "meta.json").write_text(json.dumps({
         "modele": "XGBoost C — physique pur, 41 features",
@@ -372,10 +564,21 @@ def main() -> None:
                  "lignes": 38068464, "feux": 6322},
         "modele_a": {"pr_auc": 0.0156, "lift": 93.8,
                      "note": "meilleur, mais exige l'historique récent des feux"},
+        # ⚠️ LES BORNES DES PARTITIONS SONT SERVIES, PAS ÉCRITES EN DUR DANS
+        # L'APPLICATION. C'est elles qui décident quand le modèle v3 a le
+        # droit d'être affiché : jamais sur le train (il a appris ces lignes),
+        # jamais sur la validation (elle a servi à choisir les
+        # hyperparamètres, le modèle et la calibration), uniquement sur le
+        # test — la seule fenêtre qui n'a informé aucune décision.
+        "splits": {"train": [2006, 2019], "val": [2020, 2022],
+                   "test": [2023, 2025]},
         "climatologie": [CLIM_DEBUT, CLIM_FIN],
         "horizon": [AN_DEBUT, AN_FIN],
         "decennies": [f"{a}-{b}" for a, b in DECENNIES],
         "features": list(_m.get_booster().feature_names),
+        # ⚠️ ORDRE D'ENTRAÎNEMENT, pas ordre alphabétique ni d'importance.
+        # v3 ne porte pas ses noms : c'est cette liste qui fait foi.
+        "features_v3": colonnes_v3,
     }, indent=2, ensure_ascii=False), encoding="utf-8")
 
     total = sum(f.stat().st_size for f in APP.glob("*") if f.is_file())

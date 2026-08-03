@@ -31,31 +31,54 @@ st.set_page_config(page_title="Carte · Risque incendie", page_icon="🔥",
                    layout="wide", initial_sidebar_state="expanded")
 N.entete()
 
-MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
-        "août", "septembre", "octobre", "novembre", "décembre"]
+MOIS = N.MOIS
 
 # ════════════════════════════════════════════════════════════════════════
 #  les réglages
 # ════════════════════════════════════════════════════════════════════════
+TEST_MIN, TEST_MAX = N.meta()["splits"]["test"]
+
 with st.sidebar:
+    st.markdown("### Le modèle")
+    mode_modele = st.radio(
+        "Modèle",
+        ["Temps réel et projections",
+         f"Rétrospectif — C contre v3 ({TEST_MIN}-{TEST_MAX})"],
+        index=0, label_visibility="collapsed",
+        help="Le modèle **C** (physique pure) est le seul déployable : il ne "
+             "dépend d'aucune donnée indisponible à l'avance.\n\n"
+             "Le modèle **v3** est meilleur — 93,8× contre 63,7× sur le test — "
+             "mais il a besoin de l'historique des feux, que la BDIFF ne "
+             "publie qu'un an plus tard. Le mode rétrospectif permet de les "
+             "comparer, **uniquement sur le jeu de test**.")
+    retro = mode_modele.startswith("Rétrospectif")
+
+    if retro:
+        st.caption(f"Les deux modèles sont servis avec la **météo réellement "
+                   f"observée** ce jour-là — celle qu'ils ont vue pendant "
+                   f"l'évaluation.")
+
     st.markdown("### Quoi afficher")
     couche = st.radio(
         "Couche", ["Risque prédit", "Danger météo (FWI)"], index=0,
+        disabled=retro,
         help="Le risque croise météo, végétation et relief — c'est la sortie "
              "du modèle. Le FWI est l'indice météo officiel EFFIS, sans "
              "modèle. Les comparer montre ce que le territoire ajoute.")
 
     st.markdown("### Quand")
-    mode = st.radio("Période",
-                    ["Une date précise", "Une année entière", "Comparer deux dates"],
-                    index=0, label_visibility="collapsed")
+    mode = "Une date précise" if retro else st.radio(
+        "Période",
+        ["Une date précise", "Une année entière", "Comparer deux dates"],
+        index=0, label_visibility="collapsed")
 
 
-    def choix_date(cle: str, defaut_an: int):
+    def choix_date(cle: str, defaut_an: int, an_min=None, an_max=None):
         """⚠️ Un SÉLECTEUR de date, pas un curseur. On ne choisit pas un jour
         en faisant glisser un curseur sur 28 000 positions."""
         c1, c2 = st.columns(2)
-        a = c1.number_input("Année", N.AN_OBS_MIN, N.AN_PROJ_MAX, defaut_an,
+        a = c1.number_input("Année", an_min or N.AN_OBS_MIN,
+                            an_max or N.AN_PROJ_MAX, defaut_an,
                             step=1, key=f"an{cle}")
         m = c2.selectbox("Mois", range(1, 13), index=7,
                          format_func=lambda x: MOIS[x - 1], key=f"mo{cle}")
@@ -68,7 +91,12 @@ with st.sidebar:
 
 
     date_b = None
-    if mode == "Une date précise":
+    if retro:
+        # ⚠️ Bornes IMPOSÉES au jeu de test. Le sélecteur ne propose même pas
+        # les autres années : un message d'erreur après coup serait moins
+        # clair qu'une plage qui ne les contient pas.
+        date = choix_date("r", TEST_MIN + 1, TEST_MIN, TEST_MAX)
+    elif mode == "Une date précise":
         date = choix_date("a", 2025)
     elif mode == "Une année entière":
         an = st.slider("Année", N.AN_OBS_MIN, N.AN_PROJ_MAX, 2025, step=1)
@@ -97,10 +125,6 @@ with st.sidebar:
                       label_visibility="collapsed")
 
 # ════════════════════════════════════════════════════════════════════════
-R = N.predire(date, scenario)
-projete = date.year > N.AN_OBS_MAX
-
-
 def carte(D: pd.DataFrame, titre: str, vue=None):
     """Une carte de chaleur, aux couleurs EFFIS."""
     if couche.startswith("Risque"):
@@ -120,6 +144,114 @@ def carte(D: pd.DataFrame, titre: str, vue=None):
         height=420, width="stretch")
 
 
+# ════════════════════════════════════════════════════════════════════════
+#  MODE RÉTROSPECTIF — le seul endroit où le modèle v3 a le droit d'exister
+# ════════════════════════════════════════════════════════════════════════
+if retro:
+    autorise, motif = N.v3_autorise(date.year)
+    if not autorise:                       # ceinture et bretelles
+        st.error(motif)
+        st.stop()
+
+    st.markdown(f"## {N.date_fr(date)} — les deux modèles, "
+                f"et ce qui a réellement brûlé")
+    st.caption("Météo réellement observée ce jour-là, pour les deux modèles. "
+               "Comparer v3 sur météo réelle à C sur climatologie mesurerait "
+               "la différence de météo, pas de modèle.")
+
+    Rc = N.predire(date, nom="C", observee=True)
+    Rv = N.predire(date, nom="v3", observee=True)
+
+    # ── ce qui a effectivement brûlé ────────────────────────────────────
+    jf = N.jours_feu()
+    brules = set(jf[jf.date == date].code_insee)
+
+    def classement(R):
+        """Rang décroissant : 1 = la commune la plus à risque selon le modèle."""
+        return R.assign(pos=R.score.rank(ascending=False, method="min"))
+
+    Rc, Rv = classement(Rc), classement(Rv)
+
+    if brules:
+        pc = Rc[Rc.code_insee.isin(brules)].pos
+        pv = Rv[Rv.code_insee.isin(brules)].pos
+        n = len(Rc)
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Communes ayant brûlé", f"{len(brules)}")
+        m2.metric("Rang médian — modèle C", f"{pc.median():,.0f}ᵉ"
+                  .replace(",", " "), f"sur {n:,}".replace(",", " "),
+                  delta_color="off")
+        m3.metric("Rang médian — modèle v3", f"{pv.median():,.0f}ᵉ"
+                  .replace(",", " "),
+                  f"{100 * (pv.median() / pc.median() - 1):+.0f} % vs C",
+                  delta_color="inverse")
+        m4.metric("Dans le top 1 % (347 communes)",
+                  f"C {100 * (pc <= n * .01).mean():.0f} %  ·  "
+                  f"v3 {100 * (pv <= n * .01).mean():.0f} %")
+        st.caption("Un rang médian **plus bas** est meilleur : le feu était "
+                   "mieux classé. Sur une seule journée, ces chiffres sont "
+                   "très bruités — c'est une illustration, pas une mesure. "
+                   "La mesure est page *Les modèles*, sur 6 322 feux.")
+    else:
+        st.info("Aucun départ de feu déclaré ce jour-là dans la BDIFF. "
+                "Choisissez une date d'été pour que la comparaison ait du "
+                "relief.")
+
+    # ── les deux cartes ─────────────────────────────────────────────────
+    g, d_ = st.columns(2)
+    with g:
+        carte(Rc, "Modèle C — physique pure, déployable")
+    with d_:
+        carte(Rv, "Modèle v3 — avec l'historique des feux")
+
+    # ── où sont-ils en désaccord ? ──────────────────────────────────────
+    st.markdown("##### Là où les deux modèles ne sont pas d'accord")
+    J = Rc[["code_insee", "nom", "dep_nom", "pos", "fwi", "part_maquis"]].merge(
+        Rv[["code_insee", "pos", "feux_commune_365j",
+            "jours_depuis_dernier_feu"]],
+        on="code_insee", suffixes=("_c", "_v3"))
+    J["ecart"] = J.pos_c - J.pos_v3          # > 0 : v3 la classe plus haut
+    J["a_brule"] = J.code_insee.isin(brules)
+
+    t1, t2 = st.columns(2)
+    with t1:
+        st.markdown("**v3 alerte, C non** — l'historique parle")
+        h = J.nlargest(8, "ecart")[
+            ["nom", "dep_nom", "pos_c", "pos_v3", "feux_commune_365j",
+             "jours_depuis_dernier_feu", "a_brule"]]
+        st.dataframe(h.rename(columns={
+            "nom": "Commune", "dep_nom": "Département", "pos_c": "rang C",
+            "pos_v3": "rang v3", "feux_commune_365j": "feux 365 j",
+            "jours_depuis_dernier_feu": "j. depuis",
+            "a_brule": "a brûlé"}), width="stretch", hide_index=True)
+    with t2:
+        st.markdown("**C alerte, v3 non** — le territoire parle")
+        b = J.nsmallest(8, "ecart")[
+            ["nom", "dep_nom", "pos_c", "pos_v3", "fwi", "part_maquis",
+             "a_brule"]]
+        st.dataframe(b.assign(part_maquis=(100 * b.part_maquis).round(1)).rename(
+            columns={"nom": "Commune", "dep_nom": "Département",
+                     "pos_c": "rang C", "pos_v3": "rang v3", "fwi": "FWI",
+                     "part_maquis": "maquis %", "a_brule": "a brûlé"}),
+            width="stretch", hide_index=True)
+
+    st.info(f"""
+**Ce que ce tableau montre.** À gauche, v3 place haut des communes que C ignore
+— regardez les colonnes `feux 365 j` et `j. depuis` : v3 dit *« ça a brûlé ici
+récemment »*. À droite, C place haut des communes que v3 ignore, sur la
+végétation et la météo.
+
+Les deux ont raison à leur manière. Mais **la colonne de gauche est
+inaccessible en temps réel** : le {date.strftime('%d/%m/%Y')}, la BDIFF
+n'aurait publié aucun feu de {date.year}. C'est tout l'argument, et c'est
+pourquoi l'application tourne sur C.
+""")
+    st.stop()
+
+# ════════════════════════════════════════════════════════════════════════
+R = N.predire(date, scenario)
+projete = date.year > N.AN_OBS_MAX
+
 # ── mode comparaison : deux cartes côte à côte, même échelle ────────────
 if date_b is not None:
     Rb = N.predire(date_b, scenario)
@@ -127,9 +259,9 @@ if date_b is not None:
 
     g, d_ = st.columns(2)
     with g:
-        carte(R, date.strftime("%d %B %Y"))
+        carte(R, N.date_fr(date))
     with d_:
-        carte(Rb, date_b.strftime("%d %B %Y"))
+        carte(Rb, N.date_fr(date_b))
 
     st.markdown("##### Ce qui change entre les deux")
     j = R[["code_insee", "nom", "dep_nom", "fwi", "score", "danger_effis"]].merge(
@@ -158,7 +290,7 @@ if date_b is not None:
 
 if projete:
     st.warning(
-        f"**{date.strftime('%d %B %Y')} — ce n'est pas une prévision météo.** "
+        f"**{N.date_fr(date)} — ce n'est pas une prévision météo.** "
         f"Personne ne connaît le temps qu'il fera ce jour-là. La carte montre "
         f"ce que vaudrait un **{date.day} {MOIS[date.month - 1]} ordinaire "
         f"sous le climat de {date.year}** : le cycle saisonnier vient des "

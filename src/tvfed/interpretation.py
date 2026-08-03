@@ -133,14 +133,26 @@ def paires_redondantes(C: pd.DataFrame, seuil: float = SEUIL_CORR) -> pd.DataFra
 # ════════════════════════════════════════════════════════════════════════
 #  2. les deux échantillons de validation
 # ════════════════════════════════════════════════════════════════════════
-def echantillons(m, prep, taux, n: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Retourne (aléatoire, sommet) — deux vues du même modèle."""
+def echantillons(m, prep, taux, n: int,
+                 colonnes: list[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Retourne (aléatoire, sommet) — deux vues du même modèle.
+
+    `colonnes` restreint les features envoyées au modèle. Sans lui, on sert
+    les 52 du v3 ; avec, on peut expliquer le modèle C et ses 41.
+
+    ⚠️ Ne PAS appeler ce paramètre `garde` : c'est déjà le nom du masque
+    booléen de l'échantillon aléatoire, quelques lignes plus bas. La collision
+    laissait passer le premier bloc puis sélectionnait des LIGNES au lieu de
+    colonnes — XGBoost recevait alors 52 features au lieu de 41.
+    """
     rng = np.random.default_rng(42)
     alea, hauts, lu, t0 = [], [], 0, time.time()
 
     for bloc in matrices.parcourir("val"):
         bloc = clustering.appliquer(bloc, taux)
         X = prep.transform(bloc)
+        if colonnes is not None:
+            X = pd.DataFrame(X, columns=prep.colonnes_)[colonnes]
         p = m.predict_proba(X)[:, 1]
 
         # échantillon aléatoire : une fraction constante de chaque bloc
