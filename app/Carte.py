@@ -148,7 +148,12 @@ def couche_communes(D: pd.DataFrame):
     C = N.contours().merge(
         D.assign(poids=poids_de(D))[["code_insee", "poids", "nom"]],
         on="code_insee", how="inner")
-    C["couleur"] = list(N.couleur_effis(C.poids.to_numpy()))
+    # ⚠️ `.tolist()`, PAS `list()`. `list()` d'un tableau NumPy donne des
+    # tableaux NumPy par cellule ; pydeck sérialise la table en JSON et
+    # échoue dessus sans rien dire. Résultat : deck.gl ne reçoit aucune
+    # couleur et la carte s'affiche vide. `.tolist()` rend des entiers
+    # Python, qui passent.
+    C["couleur"] = N.couleur_effis(C.poids.to_numpy()).tolist()
     return pdk.Layer(
         "PolygonLayer", C[["polygone", "couleur", "nom"]],
         get_polygon="polygone", get_fill_color="couleur",

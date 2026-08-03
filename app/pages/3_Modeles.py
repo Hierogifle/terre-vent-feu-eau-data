@@ -98,16 +98,24 @@ with o1:
             if len(s):
                 ax.plot(100 * s.budget, 100 * s.rappel, color=coul, lw=2,
                         label=lib)
-        ax.plot([0, 100], [0, 100], ":", color=N.MUTED, lw=1.2,
+        ax.plot([0, 25], [0, 25], ":", color=N.MUTED, lw=1.2,
                 label="au hasard")
-        ax.plot(100 * r.budget, 100 * r.rappel, "o", color=N.ROUGE, ms=9,
+        ax.plot(100 * r.budget, 100 * r.rappel, "o", color=N.ROUGE, ms=10,
                 zorder=5)
-        ax.set_xscale("log")
-        ax.set_xlim(0.02, 100)
+        ax.annotate(f"{N.pct(r.rappel)} des départs",
+                    xy=(100 * r.budget, 100 * r.rappel),
+                    xytext=(10, -16), textcoords="offset points",
+                    fontsize=10, weight="bold", color=N.ROUGE)
+        # échelle linéaire : l'échelle logarithmique se lit mal et le premier
+        # réflexe devant elle est de croire que la courbe est plus plate
+        # qu'elle ne l'est.
+        ax.set_xlim(0, 25)
         ax.set_ylim(0, 100)
-        habiller(ax, x="part du territoire surveillée (%, échelle log)",
-                 y="départs attrapés (%)")
-        ax.legend(frameon=False, fontsize=9, loc="upper left")
+        ax.set_xticks(range(0, 26, 5), [f"{v} %" for v in range(0, 26, 5)])
+        ax.set_yticks(range(0, 101, 20), [f"{v} %" for v in range(0, 101, 20)])
+        habiller(ax, x="part du territoire surveillée",
+                 y="départs attrapés")
+        ax.legend(frameon=False, fontsize=9, loc="lower right")
         plt.tight_layout(); st.pyplot(fig, width='stretch'); plt.close(fig)
 
         v3 = OP[OP.modele == "v3"]
