@@ -1,15 +1,12 @@
-"""Ce qu'on a compris des données.
+"""Ce que les données disent.
 
-Quatre blocs : d'où elles viennent, ce qu'elles disent du danger sur 53 ans,
-où ça brûle et sur quoi, et ce que la dimension TEMPS apporte — ou n'apporte
-pas.
+Quatre onglets : d'où elles viennent, où et quand ça brûle, si le danger
+augmente, et ce que la dimension temporelle permet de prévoir.
 
-⚠️ AUCUN CHIFFRE DE TENDANCE N'EST ÉCRIT EN DUR DANS CE FICHIER.
-Une version antérieure annonçait « +45 % de FWI moyen (p < 0,0001) » et « sur
-2006-2025 la pente n'est pas significative (p = 0,13) ». Les deux étaient
-fausses, et ont survécu des semaines précisément parce qu'elles étaient dans
-une chaîne de caractères que rien ne recalculait. Tout vient désormais de
-`tendances.csv`, produit par `tvfed.export_app`.
+Aucun chiffre de tendance n'est écrit en dur ici. Tout vient de
+`tendances.csv`, produit par `tvfed.export_app`. Une version antérieure
+annonçait « +45 % de FWI » dans une chaîne de caractères que rien ne
+recalculait, et la valeur était fausse.
 """
 from __future__ import annotations
 
@@ -35,11 +32,11 @@ plt.rcParams.update({"figure.facecolor": N.FOND, "axes.facecolor": N.FOND,
                      "ytick.color": N.MUTED, "axes.labelcolor": N.INK})
 N.entete()
 
-COM, MT, TEN = N.communes(), N.meta(), N.tendances()
+COM, TEN = N.communes(), N.tendances()
+MOIS_DOY = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
 
 
 def ten(nom: str) -> pd.Series:
-    """Une ligne de tendances.csv, par son nom de série."""
     return TEN[TEN.serie == nom].iloc[0]
 
 
@@ -49,299 +46,342 @@ JOURS = ten("jours de danger élevé (FWI > 21,3)")
 FEUX = ten("communes-jours en feu")
 
 
-# ════════════════════════════════════════════════════════════════════════
-st.markdown("## Le jeu de données")
-a, b, c, d = st.columns(4)
-a.metric("Communes", f"{len(COM):,}".replace(",", " "))
-b.metric("Jours couverts", "19 358", "1973 → 2025")
-c.metric("Communes-jours en feu", f"{int(COM.feux.sum()):,}".replace(",", " "),
-         "2006-2025")
-d.metric("Surface brûlée",
-         f"{COM.ha.sum() / 1000:,.0f} k ha".replace(",", " "))
+@st.cache_data(show_spinner=False)
+def saison() -> pd.DataFrame:
+    """Feux par département et par jour de l'année, 2006-2025.
 
-st.markdown("""
-Quatre sources, croisées sur le **code INSEE** et sur une **grille météo de
-0,25°** :
+    Calculé à la volée : `jours_feu.parquet` fait 49 130 lignes et
+    `communes.parquet` porte déjà le département. Aucun artefact à produire.
+    """
+    d = N.jours_feu().merge(COM[["code_insee", "dep_nom"]], on="code_insee")
+    d["doy"] = d.date.dt.dayofyear
+    return d.groupby(["dep_nom", "doy"], as_index=False).n.sum()
+
+
+def liste(s: pd.Series) -> str:
+    """« Cantal (52 %), Dordogne (44 %) » — sans article, donc utilisable
+    après un deux-points quel que soit le genre du département."""
+    return ", ".join(f"{d} ({N.pct(p)})" for d, p in s.items())
+
+
+def habiller(ax, titre=None, y=None):
+    if titre:
+        ax.set_title(titre, fontsize=10.5, weight="bold", loc="left")
+    if y:
+        ax.set_ylabel(y)
+    ax.grid(color=N.GRID, lw=.7)
+    ax.set_axisbelow(True)
+    ax.spines[["top", "right"]].set_visible(False)
+
+
+o1, o2, o3, o4 = st.tabs(["Le jeu de données", "Où et quand ça brûle",
+                          "Le danger augmente-t-il", "Ce que le temps prédit"])
+
+# ════════════════════════════════════════════════════════════════════════
+with o1:
+    a, b, c, d = st.columns(4)
+    a.metric("Communes", N.nb(len(COM)))
+    b.metric("Jours couverts", N.nb(19358), "1973 → 2025")
+    c.metric("Communes-jours en feu", N.nb(int(COM.feux.sum())), "2006-2025")
+    d.metric("Surface brûlée", f"{N.nb(COM.ha.sum() / 1000)} k ha")
+
+    st.markdown("""
+Quatre sources publiques, croisées sur le code INSEE et sur une grille météo
+de 0,25°.
 
 | Source | Ce qu'elle apporte | Volume |
 |---|---|---|
-| **CEMS** (Copernicus) | 8 indices de danger, chaque jour, chaque maille | 21,9 M lignes, 1973-2025 |
-| **BDIFF** (IGN) | les feux déclarés, commune par commune | 142 787 feux au total, 52 809 sur le périmètre |
-| **CORINE** (Copernicus) | l'occupation du sol, 44 postes | 1,08 M lignes |
-| **INSEE** | référentiel des communes et fusions | 34 734 communes |
+| CEMS · Copernicus | 8 indices de danger, par jour et par maille | 21,9 M lignes, 1973-2025 |
+| BDIFF · IGN | les feux déclarés, commune par commune | 52 809 sur le périmètre |
+| CORINE Land Cover | l'occupation du sol, 44 postes | 1,08 M lignes |
+| INSEE | référentiel des communes et leurs fusions | 34 734 communes |
 
-La table centrale est une grille **commune × jour** de
-**253 731 870 lignes** sur 2006-2025, avec une cible binaire : *y a-t-il eu un
-départ de feu ce jour-là dans cette commune ?*
+La table centrale croise les communes et les jours : une ligne par commune et
+par jour, qu'il y ait eu un feu ou non. **253 731 870 lignes** sur 2006-2025.
 
-**49 130 fois oui, soit 0,0194 %.** C'est cette rareté qui commande toute la
-méthode — à ce niveau, un modèle qui répond toujours « non » a 99,98 % de
-justesse et ne sert à rien.
+La cible est binaire : y a-t-il eu un départ de feu ce jour-là dans cette
+commune ? **49 130 fois oui, soit 0,0194 %.** Cette rareté commande le reste
+de la méthode. Un modèle qui répond toujours « non » a 99,98 % de justesse.
 """)
 
-with st.expander("Pourquoi une grille dense, et non la seule liste des feux ?"):
-    st.markdown("""
-Parce qu'une série creuse rendrait les fenêtres glissantes **silencieusement
-fausses**. « Nombre de feux dans les 30 jours précédents » se calcule en
-remontant 30 lignes — si les jours sans feu sont absents, on remonte en
-réalité plusieurs années.
+    with st.expander("Pourquoi garder les jours sans feu ?"):
+        st.markdown("""
+Parce qu'une série creuse fausse les fenêtres glissantes. « Nombre de feux
+dans les 30 jours précédents » se calcule en remontant 30 lignes. Si les jours
+sans feu sont absents, on remonte en réalité plusieurs années, et le calcul
+donne un résultat plausible mais faux.
 
-C'est la raison technique n°1 d'avoir matérialisé 253 millions de lignes
-plutôt que 52 809.
+C'est la raison d'avoir matérialisé 253 millions de lignes plutôt que 52 809.
 """)
 
-st.divider()
+    with st.expander("Les fusions de communes"):
+        st.markdown("""
+965 feux portent un code INSEE qui n'existe plus dans le référentiel 2026.
+
+On a d'abord essayé de les rattacher par le nom. Mauvaise idée : « Chirac »
+en Lozère renvoyait vers une commune de Charente, et « Fraissinet-de-Lozère »
+vers « Fraissinet-de-Fourques », qui est une autre commune. Trois propositions
+fausses sur huit testées.
+
+On est donc passé par le fichier officiel des mouvements de communes de
+l'INSEE, en suivant les chaînes de fusion de façon transitive. Il reste
+30 cas sans solution, essentiellement des scissions où un feu ancien ne peut
+être attribué à aucune des communes filles. Ils sont écartés et comptés.
+""")
 
 # ════════════════════════════════════════════════════════════════════════
-#  le danger augmente-t-il ?
+with o2:
+    g1, g2 = st.columns(2)
+
+    with g1:
+        top = (COM.groupby("dep_nom").feux.sum().nlargest(12)
+               .sort_values())
+        fig, ax = plt.subplots(figsize=(6.5, 4))
+        ax.barh(range(len(top)), top, color=N.ROUGE, edgecolor=N.FOND, lw=1.2)
+        for i, v in enumerate(top):
+            ax.text(v * 1.01, i, N.nb(v), va="center", fontsize=8.5,
+                    weight="bold")
+        ax.set_yticks(range(len(top)), top.index, fontsize=8.5)
+        ax.set_xlim(0, top.max() * 1.15)
+        ax.set_xlabel("communes-jours ayant brûlé, 2006-2025")
+        habiller(ax, "Les 12 départements les plus touchés")
+        plt.tight_layout(); st.pyplot(fig, width='stretch'); plt.close(fig)
+
+    with g2:
+        C = COM[COM.part_maquis.notna()].copy()
+        C["tranche"] = pd.cut(100 * C.part_maquis, [-.01, .5, 5, 15, 30, 101],
+                              labels=["< 0,5 %", "0,5-5 %", "5-15 %",
+                                      "15-30 %", "> 30 %"])
+        t = C.groupby("tranche", observed=True).agg(
+            feux=("feux", "sum"), n=("code_insee", "size"))
+        t["taux"] = t.feux / (t.n * 7305)
+        fig, ax = plt.subplots(figsize=(6.5, 4))
+        ax.bar(range(len(t)), 100 * t.taux, color="#8b5a2b",
+               edgecolor=N.FOND, lw=1.4)
+        for i, (v, n) in enumerate(zip(100 * t.taux, t.n)):
+            ax.text(i, v * 1.03, f"{v:.3f} %", ha="center", fontsize=8.5,
+                    weight="bold")
+            ax.text(i, v * .5, N.nb(n) + "\ncommunes", ha="center",
+                    fontsize=7.5, color="white")
+        ax.set_xticks(range(len(t)), t.index, fontsize=8.5)
+        ax.set_xlabel("part de maquis dans la commune")
+        habiller(ax, "Le maquis, seul, multiplie le risque",
+                 "probabilité de feu un jour donné (%)")
+        plt.tight_layout(); st.pyplot(fig, width='stretch'); plt.close(fig)
+
+    ratio = (100 * t.taux).iloc[-1] / (100 * t.taux).iloc[0]
+    st.markdown(f"""
+Une commune couverte à plus de 30 % de maquis brûle **{ratio:.0f} fois** plus
+souvent qu'une commune qui n'en a pas. C'est le signal le plus fort du jeu de
+données, et le modèle s'en sert : le maquis arrive en tête de l'importance par
+gain, à 26,2 %.
+
+Cette mesure a ses limites. Sur un échantillon aléatoire de communes-jours,
+SHAP place le maquis au 10ᵉ rang, parce qu'il n'y en a pas là où rien ne se
+passe. Il remonte au 2ᵉ dès qu'on regarde les communes que le modèle juge à
+risque. Les trois classements sont détaillés page *Pourquoi un feu part*.
+""")
+
+    st.divider()
+    st.markdown("### Quand ça brûle")
+
+    S = saison()
+    ordre = (S.groupby("dep_nom").n.sum().sort_values(ascending=False).index)
+    dep = st.selectbox("Département", ordre, index=0,
+                       help="Classés par nombre de feux décroissant.")
+
+    nat = S.groupby("doy", as_index=False).n.sum()
+    loc = S[S.dep_nom == dep]
+
+    fig, ax = plt.subplots(1, 2, figsize=(14.5, 3.6), sharex=True)
+    for a_, (d_, titre, coul) in zip(ax, [
+            (nat, "France entière", N.ORANGE),
+            (loc, dep, N.ROUGE)]):
+        s = d_.set_index("doy").n.reindex(range(1, 367), fill_value=0)
+        liss = s.rolling(7, center=True, min_periods=1).mean()
+        a_.fill_between(liss.index, 0, liss.to_numpy(), color=coul, lw=0,
+                        alpha=.85)
+        a_.set_xticks(MOIS_DOY, list("JFMAMJJASOND"))
+        a_.set_xlim(1, 366)
+        habiller(a_, titre, "feux (lissé sur 7 jours)")
+    plt.tight_layout(); st.pyplot(fig, width='stretch'); plt.close(fig)
+
+    # ⚠️ Tout ce qui est affirmé ici est CALCULÉ. Une première rédaction
+    # attribuait le pic d'hiver au Sud-Ouest et aux Pyrénées : faux. En valeur
+    # absolue il est mené par les départements méditerranéens, qui brûlent
+    # simplement beaucoup. Ce sont les PARTS locales qui distinguent les deux
+    # régimes, pas les totaux.
+    HIV, ETE = slice(32, 105), slice(182, 258)
+    sn = nat.set_index("doy").n.reindex(range(1, 367), fill_value=0)
+    hiver, ete = int(sn.loc[HIV].sum()), int(sn.loc[ETE].sum())
+
+    par_dep = S.pivot_table(index="dep_nom", columns="doy", values="n",
+                            aggfunc="sum", fill_value=0)
+    tot = par_dep.sum(axis=1)
+    ph = par_dep.loc[:, HIV.start:HIV.stop].sum(axis=1) / tot
+    pe = par_dep.loc[:, ETE.start:ETE.stop].sum(axis=1) / tot
+    assez = tot >= 300                      # sous 300 feux, la part est bruitée
+    hivernaux = ph[assez].nlargest(3)
+    estivaux = pe[assez].nlargest(2)
+
+    sl = loc.set_index("doy").n.reindex(range(1, 367), fill_value=0)
+    part_h = sl.loc[HIV].sum() / max(sl.sum(), 1)
+    part_e = sl.loc[ETE].sum() / max(sl.sum(), 1)
+
+    st.markdown(f"""
+La France a **deux saisons de feu**. Celle de fin d'hiver, de février à
+mi-avril, totalise {N.nb(hiver)} départs ; celle d'été, de juillet à
+mi-septembre, {N.nb(ete)}.
+
+Les deux pics sont menés, en valeur absolue, par les mêmes départements
+méditerranéens : ils brûlent beaucoup, toute l'année. La différence se voit
+dans les proportions locales.
+
+Là où l'hiver l'emporte : {liste(hivernaux)}. Ce sont les écobuages, ces feux
+de pâture allumés volontairement en fin d'hiver pour rouvrir les parcours.
+Là où l'été l'emporte : {liste(estivaux)}.
+
+**{dep}** : {N.pct(part_h)} des départs en fin d'hiver, {N.pct(part_e)} en été.
+""")
+
 # ════════════════════════════════════════════════════════════════════════
-st.markdown("## Le danger météo augmente-t-il ?")
-st.caption("Moyenne nationale des 1 131 mailles, par décennie. Ce sont des "
-           "mesures issues des réanalyses Copernicus, pas des projections.")
+with o3:
+    st.caption("Moyenne nationale des 1 131 mailles, par décennie. Ce sont des "
+               "mesures issues des réanalyses Copernicus, pas des projections.")
 
-D = N.decennies().dropna(subset=["periode"])
-nat = D.groupby("periode").agg(
-    fwi=("fwi_moyen", "mean"), p90=("fwi_p90", "mean"),
-    jours=("jours_danger", "mean"), extremes=("jours_tres_eleve", "mean")
-).sort_index()
+    D = N.decennies().dropna(subset=["periode"])
+    nat_d = D.groupby("periode").agg(
+        fwi=("fwi_moyen", "mean"), jours=("jours_danger", "mean"),
+        extremes=("jours_tres_eleve", "mean")).sort_index()
 
-fig, ax = plt.subplots(1, 3, figsize=(15, 3.5))
-x = np.arange(len(nat))
-for a_, col, titre, coul in (
-        (ax[0], "fwi", "FWI moyen annuel", N.ORANGE),
-        (ax[1], "jours", "Jours de danger élevé (FWI > 21,3)", N.ROUGE),
-        (ax[2], "extremes", "Jours très élevés (FWI > 38)", "#8b1a1a")):
-    a_.bar(x, nat[col], color=coul, edgecolor=N.FOND, linewidth=1.4)
-    for i, v in enumerate(nat[col]):
-        a_.text(i, v * 1.02, f"{v:.1f}", ha="center", fontsize=8.5, weight="bold")
-    a_.set_xticks(x)
-    a_.set_xticklabels(nat.index, fontsize=7.5, rotation=25, ha="right")
-    a_.set_title(titre, fontsize=10.5, weight="bold", loc="left")
-    a_.grid(axis="y", color=N.GRID, lw=.7); a_.set_axisbelow(True)
-    a_.spines[["top", "right"]].set_visible(False)
-plt.tight_layout()
-st.pyplot(fig, width='stretch')
-plt.close(fig)
+    fig, ax = plt.subplots(1, 3, figsize=(15, 3.4))
+    x = np.arange(len(nat_d))
+    for a_, col, titre, coul in (
+            (ax[0], "fwi", "FWI moyen annuel", N.ORANGE),
+            (ax[1], "jours", "Jours de danger élevé (FWI > 21,3)", N.ROUGE),
+            (ax[2], "extremes", "Jours très élevés (FWI > 38)", "#8b1a1a")):
+        a_.bar(x, nat_d[col], color=coul, edgecolor=N.FOND, linewidth=1.4)
+        for i, v in enumerate(nat_d[col]):
+            a_.text(i, v * 1.02, f"{v:.1f}", ha="center", fontsize=8.5,
+                    weight="bold")
+        a_.set_xticks(x, nat_d.index, fontsize=7.5, rotation=25, ha="right")
+        habiller(a_, titre)
+    plt.tight_layout(); st.pyplot(fig, width='stretch'); plt.close(fig)
 
-d0, d1 = nat.iloc[0], nat.iloc[-1]
-m1, m2, m3 = st.columns(3)
-m1.metric(f"FWI moyen · {nat.index[0]} → {nat.index[-1]}", f"{d1.fwi:.2f}",
-          f"{100 * (d1.fwi / d0.fwi - 1):+.0f} %")
-m2.metric("Jours de danger élevé", f"{d1.jours:.1f} j/an",
-          f"{d1.jours - d0.jours:+.1f} j")
-m3.metric("Jours très élevés", f"{d1.extremes:.1f} j/an",
-          f"{d1.extremes - d0.extremes:+.1f} j")
-
-st.caption(
-    f"⚠️ **Ces trois écarts ne sont pas ceux du tableau ci-dessous, et c'est "
-    f"normal.** Ici on compare la dernière décennie à la première "
-    f"({nat.index[-1]} contre {nat.index[0]}) — deux fenêtres de 6 à 10 ans. "
-    f"En dessous, une droite est ajustée sur les {FWI_AN.n_ans} années. Deux "
-    f"façons légitimes de mesurer la même hausse, deux nombres différents : "
-    f"c'est précisément pourquoi un chiffre ne doit jamais circuler sans sa "
-    f"définition.")
-
-# ── les pentes, CALCULÉES ────────────────────────────────────────────────
-st.markdown("##### Les pentes de fond, par régression linéaire")
-T = TEN.copy()
-# ⚠️ pas de markdown ici : `st.dataframe` affiche le texte brut, les
-# astérisques apparaîtraient telles quelles.
-T["Conclusion"] = np.where(T.significatif, "significatif", "NON significatif")
-st.dataframe(
-    T.assign(**{
+    st.markdown("##### Les pentes, par régression linéaire sur toute la période")
+    T = TEN.copy()
+    T["Conclusion"] = np.where(T.significatif, "significatif",
+                               "NON significatif")
+    st.dataframe(T.assign(**{
         "Série": T.serie,
         "Période": T.an_min.astype(str) + "-" + T.an_max.astype(str),
         "Pente / an": T.pente.round(4),
         "Variation": T.variation_pct.round(0).astype(int).astype(str) + " %",
         "p": T.p.map(lambda v: f"{v:.1e}"),
     })[["Série", "Période", "Pente / an", "Variation", "p", "Conclusion"]],
-    width="stretch", hide_index=True)
+        width="stretch", hide_index=True)
 
-st.info(f"""
-**Le danger monte, et c'est établi.** Sur les {FWI_AN.n_ans} années de mesures,
-le FWI moyen gagne **{FWI_AN.variation_pct:+.0f} %** (p = {FWI_AN.p:.1e}), et les
-jours de danger élevé **{JOURS.variation_pct:+.0f} %** (p = {JOURS.p:.1e}).
-
-⚠️ **L'ampleur dépend de l'agrégation, et il faut le dire.** La moyenne
-**juin-septembre** monte de **{FWI_ETE.variation_pct:+.0f} %**, plus que la moyenne
-annuelle : c'est l'été qui se réchauffe et s'assèche le plus. Citer un chiffre
-sans son périmètre est ce qui permet à deux valeurs incompatibles de coexister.
-
-**Et pourtant le nombre de feux ne monte pas** : {FEUX.variation_pct:+.0f} % sur
-{FEUX.n_ans} ans, p = {FEUX.p:.2f} — rigoureusement rien.
-""")
-
-with st.expander("Comment deux constats opposés peuvent-ils être vrais tous les deux ?"):
     st.markdown(f"""
-Ce n'est pas une contradiction, et il serait malhonnête de ne montrer que le
-premier. Trois lectures cohabitent :
+Le FWI moyen gagne **{FWI_AN.variation_pct:+.0f} %** sur {FWI_AN.n_ans} ans, et
+les jours de danger élevé {JOURS.variation_pct:+.0f} %. La moyenne de
+juin à septembre monte plus vite que la moyenne annuelle
+({FWI_ETE.variation_pct:+.0f} %) : c'est l'été qui se réchauffe et s'assèche le
+plus. Citer l'un pour l'autre change le message, il faut donc préciser lequel.
 
-1. **La puissance statistique.** Les feux ne sont observés que depuis 2006 :
-   {FEUX.n_ans} points annuels très bruités ne peuvent pas détecter une tendance
-   modérée. *L'absence de preuve n'est pas une preuve d'absence.*
-2. **La prévention fonctionne.** Le nombre de départs dépend autant des moyens
-   de lutte, des interdictions d'accès aux massifs et du débroussaillement que
-   du climat. Un aléa qui monte à sinistralité constante est le résultat
-   **attendu** d'une politique de prévention efficace.
-3. **Ce que le modèle projette, c'est l'aléa, pas le bilan.** Les projections à
-   2100 transportent l'évolution du **FWI** sous les scénarios RCP, jamais une
-   extrapolation du décompte de feux. C'est la seule des deux quantités qui
-   montre un signal, et la seule qu'un modèle climatique sache fournir.
-
-**À retenir** : ne pas dire « les feux augmentent » — les données ne le montrent
-pas. Dire « les conditions favorables aux feux augmentent très
-significativement, et le nombre de départs reste stable, ce qui est cohérent
-avec une prévention qui absorbe pour l'instant la hausse de l'aléa ».
+Le nombre de feux, lui, ne bouge pas : {FEUX.variation_pct:+.0f} % sur
+{FEUX.n_ans} ans, avec p = {FEUX.p:.2f}.
 """)
 
-st.divider()
+    with st.expander("Comment deux constats opposés peuvent-ils être vrais ?"):
+        st.markdown(f"""
+Trois explications, compatibles entre elles.
 
-# ════════════════════════════════════════════════════════════════════════
-#  où ça brûle
-# ════════════════════════════════════════════════════════════════════════
-st.markdown("## Où ça brûle, et sur quoi")
+Les feux ne sont observés que depuis 2006. {FEUX.n_ans} points annuels très
+bruités ne suffisent pas à détecter une tendance modérée : l'absence de preuve
+n'est pas une preuve d'absence.
 
-g1, g2 = st.columns(2)
+Le nombre de départs dépend aussi des moyens de lutte, des interdictions
+d'accès aux massifs et du débroussaillement. Un aléa qui monte à sinistralité
+constante est ce qu'on attend d'une prévention efficace.
 
-with g1:
-    top = (COM.groupby("dep_nom")
-             .agg(feux=("feux", "sum"), ha=("ha", "sum"))
-             .nlargest(12, "feux").sort_values("feux"))
-    fig, ax = plt.subplots(figsize=(6.5, 4))
-    ax.barh(range(len(top)), top.feux, color=N.ROUGE, edgecolor=N.FOND, lw=1.2)
-    for i, v in enumerate(top.feux):
-        ax.text(v * 1.01, i, f"{int(v):,}".replace(",", " "), va="center",
-                fontsize=8.5, weight="bold")
-    ax.set_yticks(range(len(top)))
-    ax.set_yticklabels(top.index, fontsize=8.5)
-    ax.set_xlim(0, top.feux.max() * 1.15)
-    ax.set_xlabel("communes-jours ayant brûlé, 2006-2025")
-    ax.set_title("Les 12 départements les plus touchés", fontsize=10.5,
-                 weight="bold", loc="left")
-    ax.grid(axis="x", color=N.GRID, lw=.7); ax.set_axisbelow(True)
-    ax.spines[["top", "right"]].set_visible(False)
-    plt.tight_layout(); st.pyplot(fig, width='stretch'); plt.close(fig)
+Enfin, ce que le modèle projette est l'aléa, pas le bilan. Les projections à
+2100 transportent l'évolution du FWI sous les scénarios RCP, jamais une
+extrapolation du décompte de feux.
 
-with g2:
-    # le taux de feu par tranche de maquis — le résultat central du projet
-    C = COM[COM.part_maquis.notna()].copy()
-    C["tranche"] = pd.cut(100 * C.part_maquis, [-.01, .5, 5, 15, 30, 101],
-                          labels=["< 0,5 %", "0,5-5 %", "5-15 %", "15-30 %",
-                                  "> 30 %"])
-    t = C.groupby("tranche", observed=True).agg(
-        feux=("feux", "sum"), n=("code_insee", "size"))
-    t["taux"] = t.feux / (t.n * 7305)
-    fig, ax = plt.subplots(figsize=(6.5, 4))
-    ax.bar(range(len(t)), 100 * t.taux, color="#8b5a2b", edgecolor=N.FOND, lw=1.4)
-    for i, (v, n) in enumerate(zip(100 * t.taux, t.n)):
-        ax.text(i, v * 1.03, f"{v:.3f} %", ha="center", fontsize=8.5,
-                weight="bold")
-        ax.text(i, v * .5, f"{n:,}".replace(",", " ") + "\ncommunes",
-                ha="center", fontsize=7.5, color="white")
-    ax.set_xticks(range(len(t))); ax.set_xticklabels(t.index, fontsize=8.5)
-    ax.set_xlabel("part de maquis dans la commune")
-    ax.set_ylabel("probabilité de feu un jour donné (%)")
-    ax.set_title("Le maquis, seul, multiplie le risque", fontsize=10.5,
-                 weight="bold", loc="left")
-    ax.grid(axis="y", color=N.GRID, lw=.7); ax.set_axisbelow(True)
-    ax.spines[["top", "right"]].set_visible(False)
-    plt.tight_layout(); st.pyplot(fig, width='stretch'); plt.close(fig)
-
-ratio = (100 * t.taux).iloc[-1] / (100 * t.taux).iloc[0]
-st.markdown(f"""
-Une commune couverte à plus de 30 % de maquis brûle **×{ratio:.0f}** plus
-souvent qu'une commune qui n'en a pas. C'est le résultat central du projet, et
-c'est ce que le modèle exploite : le maquis arrive **en tête de l'importance
-par gain, à 26,2 %**, devant le danger météo.
-
-⚠️ « En tête » selon *quelle* mesure, et sur *quelle* population ? La question
-n'est pas rhétorique : sur un échantillon aléatoire de communes-jours, SHAP
-place le maquis **10ᵉ** — il ne change rien là où il n'y en a pas. Il remonte
-**2ᵉ** dès qu'on regarde les communes que le modèle juge à risque. Les trois
-mesures sont détaillées page *Pourquoi un feu part*.
-
-*La météo dit quand, le territoire dit où.*
+La formulation juste est donc : les conditions favorables aux feux augmentent
+très significativement, et le nombre de départs reste stable.
 """)
 
-st.divider()
-
 # ════════════════════════════════════════════════════════════════════════
-#  le temps
-# ════════════════════════════════════════════════════════════════════════
-st.markdown("## Ce que le temps apporte — et ce qu'il n'apporte pas")
-st.caption("Analyse de la série nationale : nombre de communes-jours en feu "
-           "par jour, 7 305 points de 2006 à 2025.")
+with o4:
+    st.caption("Série nationale : nombre de communes-jours en feu par jour, "
+               "7 305 points de 2006 à 2025.")
 
-st.markdown("""
-Le modèle répond à **où**. Il ne répond jamais à **combien de feux demain en
-France**, qui est pourtant la question qui dimensionne les moyens nationaux.
-On a donc traité cet axe séparément — et il apprend surtout quelque chose sur
-les limites de l'approche temporelle.
+    st.markdown("""
+Le modèle principal répond à « où ». Il ne dit rien de « combien de feux
+demain en France », qui est pourtant la question qui dimensionne les moyens
+nationaux. On a traité cet axe séparément, avec les outils classiques des
+séries temporelles.
 """)
 
-c1, c2 = st.columns([1, 1])
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("##### Stationnarité (Dickey-Fuller augmenté)")
+        try:
+            ADF = pd.read_csv(N.DON / "series_adf.csv")
+            st.dataframe(ADF.assign(**{
+                "Série": ADF.serie, "stat ADF": ADF.adf.round(2),
+                "p": ADF.p.map(lambda v: f"{v:.1e}"),
+                "Conclusion": np.where(ADF.stationnaire, "stationnaire",
+                                       "non stationnaire"),
+            })[["Série", "stat ADF", "p", "Conclusion"]],
+                width="stretch", hide_index=True)
+            st.caption("H₀ est « la série a une racine unitaire », donc non "
+                       "stationnaire. Rejeter H₀ signifie stationnaire, ce qui "
+                       "est l'inverse de l'intuition.")
+        except FileNotFoundError:
+            st.caption("`series_adf.csv` absent : lancer `python -m tvfed.series`.")
 
-with c1:
-    st.markdown("##### Stationnarité — test de Dickey-Fuller augmenté")
-    try:
-        ADF = pd.read_csv(N.DON / "series_adf.csv")
-        st.dataframe(ADF.assign(**{
-            "Série": ADF.serie,
-            "stat ADF": ADF.adf.round(2),
-            "p": ADF.p.map(lambda v: f"{v:.1e}"),
-            "Conclusion": np.where(ADF.stationnaire, "stationnaire",
-                                   "non stationnaire"),
-        })[["Série", "stat ADF", "p", "Conclusion"]],
-            width="stretch", hide_index=True)
-        st.caption("⚠️ H₀ = « la série a une racine unitaire », donc "
-                   "**non** stationnaire. Rejeter H₀ (p < 0,05) signifie "
-                   "STATIONNAIRE — c'est l'inverse de l'intuition, et la "
-                   "confusion la plus fréquente sur ce test.")
-    except FileNotFoundError:
-        st.caption("`series_adf.csv` absent — lancer `python -m tvfed.series`.")
+    with c2:
+        st.markdown("##### Prévoir « combien » (SARIMAX)")
+        try:
+            SAR = pd.read_csv(N.DON / "series_sarimax.csv")
+            st.dataframe(SAR.assign(**{
+                "Modèle": SAR.modele, "MAE": SAR.mae.round(2),
+                "r": SAR.correlation.round(3),
+            })[["Modèle", "MAE", "r"]], width="stretch", hide_index=True)
+            st.caption("Ajusté sur 2006-2019, évalué sur 2020-2022. Le test "
+                       "2023-2025 n'est pas touché, même pour une cible "
+                       "différente.")
+        except FileNotFoundError:
+            st.caption("`series_sarimax.csv` absent : lancer "
+                       "`python -m tvfed.series`.")
 
-with c2:
-    st.markdown("##### Prévoir « combien » — SARIMAX")
-    try:
-        SAR = pd.read_csv(N.DON / "series_sarimax.csv")
-        st.dataframe(SAR.assign(**{
-            "Modèle": SAR.modele, "MAE": SAR.mae.round(2),
-            "r": SAR.correlation.round(3),
-        })[["Modèle", "MAE", "r"]], width="stretch", hide_index=True)
-        st.caption("Ajusté sur 2006-2019, évalué sur **2020-2022**. Le test "
-                   "2023-2025 n'est pas touché — même pour une cible "
-                   "différente, on ne l'entrouvre pas.")
-    except FileNotFoundError:
-        st.caption("`series_sarimax.csv` absent — lancer `python -m tvfed.series`.")
-
-st.warning("""
-**La ligne qui compte est la dernière : ARIMA sans exogène donne r = −0,118.**
-La corrélation est **négative**.
+    st.warning("""
+La ligne qui compte est la dernière : un ARIMA sans variable exogène donne
+**r = −0,118**. La corrélation est négative.
 
 À 1 096 pas d'horizon, un modèle autorégressif dont la mémoire utile est de
-deux à trois jours a totalement oublié son point de départ : il converge vers
-la moyenne, et la ligne plate qu'il produit se trouve légèrement
-anti-corrélée à l'observé, par hasard. Ce n'est pas un mauvais réglage, c'est
-**structurel**.
+deux à trois jours a oublié son point de départ. Il converge vers la moyenne,
+et la ligne plate qu'il produit se trouve légèrement anti-corrélée à l'observé.
+Ce n'est pas un défaut de réglage.
 
-Ajouter le FWI fait tomber l'erreur de 37 %. **La prévisibilité du feu n'est
-pas dans son propre passé — elle est dans la météo.** C'est exactement ce que
-le modèle principal exploite, et c'est aussi pourquoi un LSTM n'y change rien
-(voir la page *Les modèles*).
+Ajouter le FWI fait tomber l'erreur de 37 %. La prévisibilité du feu est dans
+la météo, pas dans son propre passé. C'est aussi pourquoi un LSTM n'y change
+rien, ce que détaille la page *Les modèles*.
 """)
 
-with st.expander("Pourquoi pas de composante saisonnière SARIMA ?"):
-    st.markdown("""
-Une saisonnalité annuelle sur données journalières donnerait *s* = 365. Un
-SARIMA(p,d,q)(P,D,Q)₃₆₅ demanderait d'estimer des coefficients à 365 pas de
-distance sur 5 113 points d'ajustement : le modèle serait ingérable et
-instable.
+    with st.expander("Pourquoi pas de composante saisonnière SARIMA ?"):
+        st.markdown("""
+Une saisonnalité annuelle sur données journalières donnerait *s* = 365. Il
+faudrait estimer des coefficients à 365 pas de distance sur 5 113 points
+d'ajustement : le modèle serait instable et très lent.
 
 La pratique établie sur données journalières est de porter la saisonnalité par
-des **termes de Fourier en exogène** — quelques harmoniques suffisent à décrire
-un cycle annuel lisse. C'est le « X » de SARIMAX qui travaille.
+des termes de Fourier en variable exogène. Quelques harmoniques suffisent pour
+un cycle annuel lisse. C'est le « X » de SARIMAX qui fait ce travail.
 """)
 
-st.caption("Le détail complet — ACF, PACF, choix des ordres, tendance sur "
-           "53 ans — est dans `notebook/series-lstm.ipynb` et le cours "
-           "`docs/series-temporelles.md`.")
+    st.caption("Le détail, avec les corrélogrammes ACF et PACF et le choix des "
+               "ordres, est dans `notebook/series-lstm.ipynb` et le cours "
+               "`docs/series-temporelles.md`.")

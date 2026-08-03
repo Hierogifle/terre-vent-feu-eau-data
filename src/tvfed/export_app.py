@@ -256,6 +256,47 @@ def _meteo_test() -> pd.DataFrame:
     return m
 
 
+def _operationnel() -> pd.DataFrame:
+    """La courbe « budget de surveillance » sur le test, pour C et pour v3.
+
+    Question opérationnelle : si on surveille les X % du territoire les mieux
+    classés, quelle part des départs attrape-t-on ?
+
+    ⚠️ DEUX MODÈLES, ET IL FAUT LES DEUX.
+    `operationnel_test.csv`, produit par `evaluation_test`, porte sur
+    **xgb_v3** — `MODELE = "xgb_v3"` en tête de ce module. Ses 41,9 % à 1 % de
+    budget décrivent donc le modèle qu'on NE déploie PAS. Le modèle C, lui,
+    attrape 38,5 %. Servir le premier chiffre pour vanter le second serait la
+    même erreur que le SHAP calculé sur le mauvais modèle.
+
+    On calcule donc les deux, et l'écart devient lisible : c'est le prix de la
+    déployabilité, exprimé en départs de feu plutôt qu'en PR-AUC.
+
+    ⚠️ Grille LOGARITHMIQUE. Tout se joue entre 0,05 % et 5 % ; une grille
+    linéaire y placerait trois points sur deux cents.
+    """
+    budgets = None
+    out = []
+    for nom, fichier, col in (
+            ("C", "scores_c_test.parquet", "p_c"),
+            ("v3", "scores_test.parquet", "xgb_v3")):
+        f = PROCESSED / fichier
+        if not f.exists():
+            continue
+        d = pd.read_parquet(f, columns=[col, "y"])
+        y = d.y.to_numpy()[np.argsort(-d[col].to_numpy())]
+        cum, n, tot = np.cumsum(y), len(y), int(y.sum())
+        if budgets is None:
+            budgets = np.unique(
+                np.round(np.logspace(np.log10(2e-4), 0, 200) * n)
+                .astype(int).clip(1, n))
+        pris = cum[budgets - 1]
+        out.append(pd.DataFrame({
+            "modele": nom, "budget": budgets / n, "lignes": budgets,
+            "feux": pris, "rappel": pris / tot, "precision": pris / budgets}))
+    return pd.concat(out, ignore_index=True)
+
+
 def _jours_feu() -> pd.DataFrame:
     """Un jour-feu = (commune, date, nombre de feux déclarés ce jour-là).
 
@@ -506,6 +547,17 @@ def main() -> None:
     print(f"  {len(mt_test):,} lignes ({mt_test.cell_id.nunique()} mailles × "
           f"{mt_test.date.nunique()} jours de 2023-2025)")
 
+    if (PROCESSED / "scores_c_test.parquet").exists():
+        print("courbe du budget de surveillance…")
+        op = _operationnel()
+        op.to_csv(APP / "operationnel_courbe.csv", index=False)
+        for b in (0.01, 0.05, 0.10):
+            r = op.iloc[(op.budget - b).abs().idxmin()]
+            print(f"   {r.budget:6.2%} du territoire → {r.rappel:5.1%} "
+                  f"des départs, précision {r.precision:.3%}")
+    else:
+        print("   ⚠️ scores_c_test.parquet absent — pas de courbe opérationnelle")
+
     print("jours-feu, pour reconstruire l'historique du modèle v3…")
     jf = _jours_feu()
     jf.to_parquet(APP / "jours_feu.parquet", index=False, compression="zstd")
@@ -518,7 +570,10 @@ def main() -> None:
               "series_sarimax.csv", "test_par_annee.csv", "modeles_lstm.csv",
               "best_params_lstm.json", "calibration_v3.csv",
               "baselines.csv", "modeles_ensemble.csv", "resultat_test.csv",
-              "modele_c_test.csv", "modele_taille.csv"):
+              "modele_c_test.csv", "modele_taille.csv",
+              "fiabilite_brut.csv", "fiabilite_platt.csv",
+              "fiabilite_isotonic.csv", "courbe_apprentissage.csv",
+              "operationnel_test.csv"):
         if (PROCESSED / f).exists():
             shutil.copy(PROCESSED / f, APP / f)
         else:

@@ -49,6 +49,16 @@ def nb(x, dec: int = 0) -> str:
     return f"{x:,.{dec}f}".replace(",", " ")
 
 
+def dec(x, n: int = 1) -> str:
+    """-23.6 → « −23,6 ». Virgule décimale, et vrai signe moins."""
+    return f"{x:.{n}f}".replace(".", ",").replace("-", "−")
+
+
+def pct(x, dec_: int = 0) -> str:
+    """0.523 → « 52 % ». L'espace avant le signe est la règle en français."""
+    return f"{100 * x:.{dec_}f} %".replace(".", ",").replace("-", "−")
+
+
 def date_fr(d: pd.Timestamp) -> str:
     """« 15 août 2024 ». `strftime('%B')` rendrait « August » : la locale du
     serveur n'est pas celle du lecteur, et on ne la configure pas depuis une
