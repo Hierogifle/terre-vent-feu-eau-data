@@ -144,7 +144,9 @@ st.caption(
 # ── les pentes, CALCULÉES ────────────────────────────────────────────────
 st.markdown("##### Les pentes de fond, par régression linéaire")
 T = TEN.copy()
-T["Conclusion"] = np.where(T.significatif, "significatif", "**non** significatif")
+# ⚠️ pas de markdown ici : `st.dataframe` affiche le texte brut, les
+# astérisques apparaîtraient telles quelles.
+T["Conclusion"] = np.where(T.significatif, "significatif", "NON significatif")
 st.dataframe(
     T.assign(**{
         "Série": T.serie,
@@ -249,8 +251,14 @@ ratio = (100 * t.taux).iloc[-1] / (100 * t.taux).iloc[0]
 st.markdown(f"""
 Une commune couverte à plus de 30 % de maquis brûle **×{ratio:.0f}** plus
 souvent qu'une commune qui n'en a pas. C'est le résultat central du projet, et
-c'est ce que le modèle exploite : **le maquis est sa feature n°1, à 26,2 %
-d'importance**, devant le danger météo.
+c'est ce que le modèle exploite : le maquis arrive **en tête de l'importance
+par gain, à 26,2 %**, devant le danger météo.
+
+⚠️ « En tête » selon *quelle* mesure, et sur *quelle* population ? La question
+n'est pas rhétorique : sur un échantillon aléatoire de communes-jours, SHAP
+place le maquis **10ᵉ** — il ne change rien là où il n'y en a pas. Il remonte
+**2ᵉ** dès qu'on regarde les communes que le modèle juge à risque. Les trois
+mesures sont détaillées page *Pourquoi un feu part*.
 
 *La météo dit quand, le territoire dit où.*
 """)

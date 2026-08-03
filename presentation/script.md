@@ -667,8 +667,12 @@ réseau profond — LIME redeviendrait le bon outil.
 >
 > **La surface brûlée n'est pas prédictible** : R² de 0,14, moins bon que
 > d'annoncer toujours la médiane. Elle dépend de ce qui se passe *après* le
-> départ : vent, délai d'intervention, relief. En revanche, "sera-ce un grand
-> feu de plus de 5 hectares ?" se prédit à 0,77 de ROC-AUC.
+> départ : vent, délai d'intervention, relief.
+>
+> J'ai aussi essayé la question binaire, "sera-ce un grand feu de plus de 5
+> hectares ?" — et c'est **modeste** : un lift de 2,9 seulement, contre 63,7
+> pour les départs. On sait un peu anticiper les grands feux, beaucoup moins
+> bien que les départs.
 >
 > **Une commune-jour n'est pas un incendie** : un feu traversant cinq communes
 > compte cinq fois.
@@ -784,7 +788,14 @@ réseau profond — LIME redeviendrait le bon outil.
 | Modèle | Cible | Résultat | Conclusion |
 |---|---|---|---|
 | Régression de surface | hectares brûlés | **R² 0,14** | **échec assumé** — pire que la médiane |
-| Classification « grand feu » | surface > 5 ha | ROC-AUC 0,77 | utilisable |
+| Classification « grand feu » | surface > 5 ha | **PR-AUC 0,232 · lift 2,9×** (base 8,1 %) · ROC-AUC 0,766 | modeste, à ne pas survendre |
+
+> ⚠️ **Piège à éviter sur le « grand feu ».** On est tenté de citer la ROC-AUC
+> de 0,77, qui sonne bien. Mais on vient d'expliquer pourquoi la ROC-AUC flatte
+> sur un problème déséquilibré : s'en servir ici serait se contredire. Le
+> chiffre honnête est le **lift de 2,9×**, à comparer aux 63,7× du modèle
+> principal. Dire : *« on sait un peu anticiper les grands feux, beaucoup
+> moins bien que les départs »*.
 | SARIMAX national | nombre de communes-jours en feu | MAE 4,03 · **−21,5 % vs référence saisonnière** | la météo porte la prévisibilité |
 
 ---

@@ -36,6 +36,19 @@ MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
         "août", "septembre", "octobre", "novembre", "décembre"]
 
 
+def nb(x, dec: int = 0) -> str:
+    """38068464 → « 38 068 464 ».
+
+    ⚠️ POURQUOI CE HELPER EXISTE.
+    Le raccourci `f"…{n:,}…".replace(",", " ")` était appliqué à des PHRASES
+    entières, et mangeait les virgules légitimes. Le bandeau affichait
+    « physique pur 41 features » au lieu de « physique pur, 41 features », et
+    une légende « 38 068 464 communes-jours 9 176 feux ». On formate le NOMBRE,
+    jamais le texte qui l'entoure.
+    """
+    return f"{x:,.{dec}f}".replace(",", " ")
+
+
 def date_fr(d: pd.Timestamp) -> str:
     """« 15 août 2024 ». `strftime('%B')` rendrait « August » : la locale du
     serveur n'est pas celle du lecteur, et on ne la configure pas depuis une
@@ -470,6 +483,6 @@ def entete():
         f"<b style='color:{INK}'>Risque de feu de forêt · France</b><br>"
         f"<span style='color:{MUTED};font-size:.88rem'>"
         f"{mt['modele']} — {mt['test']['lift']:.0f}× le hasard, mesuré sur "
-        f"{mt['test']['feux']:,} feux de {mt['test']['periode']}"
-        f"</span></div>".replace(",", " "),
+        f"{nb(mt['test']['feux'])} feux de {mt['test']['periode']}"
+        f"</span></div>",
         unsafe_allow_html=True)

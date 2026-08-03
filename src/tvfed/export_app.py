@@ -518,7 +518,7 @@ def main() -> None:
               "series_sarimax.csv", "test_par_annee.csv", "modeles_lstm.csv",
               "best_params_lstm.json", "calibration_v3.csv",
               "baselines.csv", "modeles_ensemble.csv", "resultat_test.csv",
-              "modele_c_test.csv"):
+              "modele_c_test.csv", "modele_taille.csv"):
         if (PROCESSED / f).exists():
             shutil.copy(PROCESSED / f, APP / f)
         else:

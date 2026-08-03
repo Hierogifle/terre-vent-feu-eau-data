@@ -171,11 +171,12 @@ T = pd.DataFrame([{
     sorted(ap.items(), key=lambda x: -x[1])])
 st.dataframe(T, width="stretch", hide_index=True)
 
-st.caption(f"Mesuré sur la **validation** — {38_068_464:,} communes-jours, "
-           f"9 176 feux, taux {TAUX_VAL:.4%}. "
-           f"L'ensemble v3 + MLP monte à {ENS.pr_auc.iloc[0]:.4f} "
-           f"(×{ENS.lift.iloc[0]:.1f}) si l'on accepte de faire tourner deux "
-           f"modèles.".replace(",", " ") if ENS is not None else "")
+st.caption(
+    f"Mesuré sur la **validation** — {N.nb(38_068_464)} communes-jours, "
+    f"9 176 feux, taux {TAUX_VAL:.4%}."
+    + (f" L'ensemble v3 + MLP monte à {ENS.pr_auc.iloc[0]:.4f} "
+       f"(×{ENS.lift.iloc[0]:.1f}) si l'on accepte de faire tourner deux "
+       f"modèles." if ENS is not None else ""))
 
 # ── le graphique en forêt ────────────────────────────────────────────────
 st.markdown("### Ces écarts survivent-ils au bruit ?")
@@ -296,9 +297,10 @@ Trois observations indépendantes convergent — voir la page *Les données* :
 - la **PACF** montre une autocorrélation épuisée en **deux à trois jours** ;
 - l'**ARIMA sans exogène** est inutilisable, **r = −0,118** : le passé des feux
   ne prédit pas leur futur ;
-- les trois premières features du modèle C sont `part_maquis` (26,2 %),
-  `danger_effis` (13,7 %) et `erc` (11,1 %) — le signal dit **où il y a du
-  combustible**, pas ce qui s'est passé le mois dernier.
+- les trois premières features du modèle C **par importance de gain** sont
+  `part_maquis` (26,2 %), `danger_effis` (13,7 %) et `erc` (11,1 %) — le
+  signal dit **où il y a du combustible**, pas ce qui s'est passé le mois
+  dernier. *(SHAP les classe autrement : voir page « Pourquoi un feu part ».)*
 
 Ce problème n'est pas une prévision de série temporelle. C'est une
 **classification spatio-temporelle d'événement rare**, sur 34 734 séries
@@ -454,8 +456,9 @@ if TPA is not None:
         st.markdown(f"""
 **Le lift varie du simple au double d'une année à l'autre**, et ce n'est pas
 du bruit : il suit la **rareté**. {int(meilleure.an)} est l'année la plus calme
-({int(meilleure.feux):,} feux) et donne le **meilleur** lift (×{meilleure.lift:.0f}) ;
-{int(pire.an)}, la plus active, le plus faible (×{pire.lift:.0f}).
+({N.nb(meilleure.feux)} feux) et donne le **meilleur** lift
+(×{meilleure.lift:.0f}) ; {int(pire.an)}, la plus active, le plus faible
+(×{pire.lift:.0f}).
 
 C'est contre-intuitif et c'est instructif : **une année calme concentre les
 feux dans les endroits les plus prévisibles**. Quand tout brûle, y compris là
@@ -463,7 +466,7 @@ où ce n'est pas censé arriver, le modèle est pris en défaut.
 
 ⚠️ Ce chiffre a été mesuré **une seule fois**, après gel complet du modèle,
 des features et de la calibration.
-""".replace(",", " "))
+""")
 
 st.divider()
 
@@ -526,16 +529,30 @@ st.divider()
 # ════════════════════════════════════════════════════════════════════════
 st.markdown("## Les limites, en clair")
 
+TA = csv("modele_taille.csv")
+ta = TA.iloc[0] if TA is not None else None
+
 l1, l2 = st.columns(2)
 with l1:
-    st.markdown("""
+    st.markdown(f"""
 ##### Ce que le modèle ne sait pas faire
 
-- **La surface brûlée n'est pas prédictible.** R² de 0,14, moins bon que
-  d'annoncer toujours la médiane. La taille dépend surtout de ce qui se passe
-  *après* le départ : vent, délai d'intervention, relief. En revanche
-  « sera-ce un grand feu de plus de 5 hectares ? » se prédit à **0,77 de
-  ROC-AUC**.
+- **La surface brûlée n'est pas prédictible.** R² de {ta.r2_log:.2f} — moins
+  bon que d'annoncer toujours la médiane. La taille dépend surtout de ce qui
+  se passe *après* le départ : vent, délai d'intervention, relief.
+- **« Sera-ce un grand feu de plus de {ta.seuil_ha:.0f} ha ? » se prédit mal
+  aussi.** PR-AUC {ta.pr_auc_grand:.3f} pour un taux de base de
+  {ta.base_grand:.1%}, soit un lift de **{ta.lift_grand:.1f}×** seulement —
+  sans commune mesure avec les {MT['test']['lift']:.1f}× du modèle principal.
+  On lit parfois « ROC-AUC {ta.roc_auc_grand:.2f} » pour ce modèle : c'est
+  exact, mais après avoir expliqué plus haut pourquoi la ROC-AUC flatte, il
+  serait malhonnête de s'en servir ici comme argument.""" if ta is not None
+                else """
+##### Ce que le modèle ne sait pas faire
+
+- **La surface brûlée n'est pas prédictible** — relancer `tvfed.taille` puis
+  `tvfed.export_app` pour afficher les chiffres.""")
+    st.markdown("""
 - **Le score affiché est un rang, pas une probabilité.** La calibration
   disponible serait fausse d'un facteur ~2.
 - **Le modèle suppose stable tout ce qui n'est pas la météo** : prévention,

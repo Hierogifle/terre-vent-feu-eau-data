@@ -155,8 +155,12 @@ def main() -> None:
     print(f"  base : {yb.mean():.1%} des feux dépassent {SEUIL_GRAND:.0f} ha "
           f"({yb.sum():,} sur {len(yb):,})")
     ap = average_precision_score(yb, pg)
-    print(f"  PR-AUC {ap:.4f}   lift {ap / yb.mean():.2f}×   "
-          f"ROC-AUC {roc_auc_score(yb, pg):.4f}")
+    # ⚠️ La ROC-AUC était AFFICHÉE et non sauvegardée. Le chiffre a fini
+    # recopié à la main dans l'application, le diaporama et le rapport, sans
+    # qu'aucun artefact ne le soutienne — exactement le travers qui a produit
+    # le « +45 % de FWI ». On l'écrit désormais dans le CSV.
+    roc = roc_auc_score(yb, pg)
+    print(f"  PR-AUC {ap:.4f}   lift {ap / yb.mean():.2f}×   ROC-AUC {roc:.4f}")
     print(f"  (la régression sur le log donne, elle, "
           f"PR-AUC {average_precision_score(yb, pred):.4f})")
     print(f"  entraîné en {time.time() - t0:.0f} s")
@@ -173,6 +177,7 @@ def main() -> None:
         "mae_log": mean_absolute_error(cible_b, pred),
         "mae_ha": mean_absolute_error(ha_vrai, ha_pred),
         "pr_auc_grand": ap, "lift_grand": ap / yb.mean(),
+        "roc_auc_grand": roc, "base_grand": float(yb.mean()),
         "seuil_ha": SEUIL_GRAND, "n_ajustement": len(a), "n_evaluation": len(b),
     }]).to_csv(PROCESSED / "modele_taille.csv", index=False)
     print(f"\n✅ modele_taille.json · modele_grand_feu.json · modele_taille.csv")

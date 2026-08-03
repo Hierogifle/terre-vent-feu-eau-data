@@ -48,6 +48,10 @@ def _lire():
                 "series_sarimax", "modeles_ensemble"):
         f = PROCESSED / f"{nom}.csv"
         d[nom] = pd.read_csv(f) if f.exists() else None
+    # ⚠️ lu depuis le CSV, et non recopié : la ROC-AUC du modèle « grand feu »
+    # était affichée par `tvfed.taille` sans être sauvegardée, et le 0,77 a
+    # circulé pendant des semaines sans artefact pour le soutenir.
+    d["taille"] = pd.read_csv(PROCESSED / "modele_taille.csv").iloc[0]
     d["meta"] = json.loads(
         (RACINE / "app" / "donnees" / "meta.json").read_text(encoding="utf-8"))
     d["tendances"] = pd.read_csv(RACINE / "app" / "donnees" / "tendances.csv")
@@ -916,8 +920,12 @@ def main() -> None:
         "**La surface brûlée n'est pas prédictible.**",
         "R² de 0,14 — moins bon que d'annoncer toujours la médiane. Elle "
         "dépend de ce qui se passe APRÈS le départ : vent, délai "
-        "d'intervention, relief. En revanche « sera-ce un grand feu de plus de "
-        "5 hectares ? » se prédit à 0,77 de ROC-AUC.",
+        "d'intervention, relief.",
+        "**Et « sera-ce un grand feu ? » se prédit mal aussi.**",
+        f"lift de {D['taille']['lift_grand']:.1f}× seulement, contre "
+        f"{mt['test']['lift']:.1f}× pour les départs. On lit parfois "
+        f"« ROC-AUC 0,77 » : c'est exact, mais s'en servir après avoir "
+        f"expliqué pourquoi la ROC-AUC flatte serait se contredire.",
         "**Une commune-jour n'est pas un incendie.**",
         "Un feu traversant cinq communes compte cinq fois.",
         "**31 communes partagent une maille météo de 28 km.**",
