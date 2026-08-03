@@ -81,36 +81,34 @@ with st.sidebar:
 def poids_de(D: pd.DataFrame, couche: str) -> pd.Series:
     """La grandeur à colorier, ramenée dans [0,1].
 
-    Les deux couches de risque sont des CLASSEMENTS : la carte répond à
-    « où regarder aujourd'hui ». Le FWI, lui, garde son échelle absolue,
-    celle d'EFFIS, dont 50 est le seuil extrême. C'est donc lui qui porte le
-    niveau de danger du jour, et le risque qui porte la géographie.
+    ⚠️ NORMALISATION LINÉAIRE, PAS UN RANG. Une version l'a essayé et la
+    carte est devenue inutilisable : un rang met par construction un sixième
+    des communes dans la classe la plus sombre, tous les jours. La France
+    paraissait brûler entièrement le 3 février.
 
-    ⚠️ POURQUOI UNE VUE « PAR KM² » EXISTE.
+    Avec une division par une valeur haute, la distribution réelle est
+    conservée : 93 % des communes restent en première classe le 12 août,
+    97 % le 3 février. La carte s'assombrit donc quand la saison le veut,
+    et fait ressortir les massifs plutôt que de peindre le pays.
+
+    ⚠️ POURQUOI UNE VUE « PAR KM² ».
     La cible du modèle est « cette commune a-t-elle AU MOINS UN feu ce
     jour-là ». Une commune de 172 km² a mécaniquement plus de chances d'en
-    contenir un qu'une de 6 km², et le modèle l'a appris : la corrélation
-    entre le score et la superficie vaut 0,55. Fontainebleau ressort donc très
-    sombre au milieu de communes vertes qui partagent sa météo.
+    contenir un qu'une de 6 km² : la corrélation entre le score et la
+    superficie vaut 0,55, et Fontainebleau ressort sombre au milieu de
+    communes vertes qui partagent sa météo.
 
-    ⚠️ LES DEUX COUCHES DE RISQUE UTILISENT LE MÊME RANG.
-    Une version antérieure normalisait la première par son maximum et la
-    seconde par un rang. L'écart visuel était spectaculaire, et trompeur :
-    il venait de la TRANSFORMATION, pas de la géographie.
-
-    Mesuré : `score / max` laisse 94 % des communes sous 0,2, donc dans la
-    première classe de couleur, parce que la distribution du score est
-    extrêmement écrasée. Le rang, lui, étale uniformément. Pendant ce temps la
-    corrélation de rang entre `score` et `score / km²` vaut 0,835 : le
-    classement change peu.
-
-    On classe donc les deux, et la seule différence restante est bien la
-    division par la surface.
+    Le rapport score/km² a en revanche une queue bien plus longue : diviser
+    par son maximum écraserait 99 % des communes en première classe. On
+    divise donc par le 99ᵉ percentile, ce qui laisse la même lecture que
+    l'autre couche sans qu'une poignée de communes minuscules ne fixe
+    l'échelle à elles seules.
     """
     if couche.startswith("Risque par"):
-        return (D.score / D.superficie_km2.clip(lower=.5)).rank(pct=True)
+        k = D.score / D.superficie_km2.clip(lower=.5)
+        return (k / k.quantile(.99)).clip(0, 1)
     if couche.startswith("Risque"):
-        return D.score.rank(pct=True)
+        return D.score / D.score.max()
     return (D.fwi / 50).clip(0, 1)
 
 
@@ -165,18 +163,18 @@ def legende(couche: str) -> None:
     """
     pal = N.PALETTES[palette]["couleurs"]
     if couche.startswith("Danger"):
-        titre = "FWI, indice de danger météo · échelle absolue"
+        titre = "FWI, indice de danger météo · échelle absolue EFFIS"
         etiq = ["0", "5,2", "11,2", "21,3", "38", "50 +"]
         sous = list(N.CLASSES)
     else:
-        # Le risque est un CLASSEMENT, pas un niveau : les repères sont donc
-        # des percentiles, et la carte utilise toute la palette même un jour
-        # calme. C'est la couche FWI qui porte le niveau absolu.
-        titre = ("risque par km² · classement des communes"
+        # Le risque n'a pas de seuils absolus : le score n'est pas calibré.
+        # L'échelle est donc relative au plus haut score du jour, ce qui
+        # laisse la carte s'assombrir en été et pâlir en hiver.
+        titre = ("risque par km², relatif à la journée"
                  if couche.startswith("Risque par")
-                 else "risque prédit · classement des communes du jour")
-        etiq = ["0", "17", "33", "50", "67", "83-100"]
-        sous = ["les plus sûres", "", "", "", "", "les plus exposées"]
+                 else "risque prédit, relatif au plus exposé du jour")
+        etiq = ["", "", "", "", "", ""]
+        sous = ["faible", "", "", "", "", "le plus exposé"]
 
     blocs = "".join(
         f"<div style='flex:1;text-align:center'>"
