@@ -81,10 +81,10 @@ with st.sidebar:
 def poids_de(D: pd.DataFrame, couche: str) -> pd.Series:
     """La grandeur à colorier, ramenée dans [0,1].
 
-    Le risque est normalisé par rapport à la journée : la carte répond à « où
-    regarder aujourd'hui ». Le FWI se lit sur l'échelle EFFIS, dont 50 est le
-    seuil extrême, donc pas de normalisation relative — sinon un jour calme
-    paraîtrait alarmant.
+    Les deux couches de risque sont des CLASSEMENTS : la carte répond à
+    « où regarder aujourd'hui ». Le FWI, lui, garde son échelle absolue,
+    celle d'EFFIS, dont 50 est le seuil extrême. C'est donc lui qui porte le
+    niveau de danger du jour, et le risque qui porte la géographie.
 
     ⚠️ POURQUOI UNE VUE « PAR KM² » EXISTE.
     La cible du modèle est « cette commune a-t-elle AU MOINS UN feu ce
@@ -93,13 +93,24 @@ def poids_de(D: pd.DataFrame, couche: str) -> pd.Series:
     entre le score et la superficie vaut 0,55. Fontainebleau ressort donc très
     sombre au milieu de communes vertes qui partagent sa météo.
 
-    Le rang plutôt que la valeur brute : la distribution du score par km² est
-    trop écrasée pour une normalisation linéaire.
+    ⚠️ LES DEUX COUCHES DE RISQUE UTILISENT LE MÊME RANG.
+    Une version antérieure normalisait la première par son maximum et la
+    seconde par un rang. L'écart visuel était spectaculaire, et trompeur :
+    il venait de la TRANSFORMATION, pas de la géographie.
+
+    Mesuré : `score / max` laisse 94 % des communes sous 0,2, donc dans la
+    première classe de couleur, parce que la distribution du score est
+    extrêmement écrasée. Le rang, lui, étale uniformément. Pendant ce temps la
+    corrélation de rang entre `score` et `score / km²` vaut 0,835 : le
+    classement change peu.
+
+    On classe donc les deux, et la seule différence restante est bien la
+    division par la surface.
     """
     if couche.startswith("Risque par"):
         return (D.score / D.superficie_km2.clip(lower=.5)).rank(pct=True)
     if couche.startswith("Risque"):
-        return D.score / D.score.max()
+        return D.score.rank(pct=True)
     return (D.fwi / 50).clip(0, 1)
 
 
@@ -154,14 +165,18 @@ def legende(couche: str) -> None:
     """
     pal = N.PALETTES[palette]["couleurs"]
     if couche.startswith("Danger"):
-        titre = "FWI, indice de danger météo"
+        titre = "FWI, indice de danger météo · échelle absolue"
         etiq = ["0", "5,2", "11,2", "21,3", "38", "50 +"]
-        sous = [c.replace("très ", "très ") for c in N.CLASSES]
+        sous = list(N.CLASSES)
     else:
-        titre = ("risque par km², rang national" if couche.startswith("Risque par")
-                 else "risque prédit, relatif à la journée")
-        etiq = ["", "", "", "", "", ""]
-        sous = ["le plus faible", "", "", "", "", "le plus élevé"]
+        # Le risque est un CLASSEMENT, pas un niveau : les repères sont donc
+        # des percentiles, et la carte utilise toute la palette même un jour
+        # calme. C'est la couche FWI qui porte le niveau absolu.
+        titre = ("risque par km² · classement des communes"
+                 if couche.startswith("Risque par")
+                 else "risque prédit · classement des communes du jour")
+        etiq = ["0", "17", "33", "50", "67", "83-100"]
+        sous = ["les plus sûres", "", "", "", "", "les plus exposées"]
 
     blocs = "".join(
         f"<div style='flex:1;text-align:center'>"
@@ -525,16 +540,20 @@ if couche.startswith("Risque par"):
     st.info("""
 Cette vue divise le score par la surface de la commune.
 
-Le modèle prédit « cette commune aura-t-elle au moins un feu aujourd'hui ». Une
-commune vaste a mécaniquement plus de chances d'en contenir un : la corrélation
-entre le score et la superficie vaut 0,55. Fontainebleau, 172 km² de forêt,
-ressort donc très au-dessus de Melun et Barbizon, qui partagent pourtant sa
-météo et son FWI de 5,1.
+Le modèle prédit « cette commune aura-t-elle au moins un feu aujourd'hui ».
+Une commune vaste a mécaniquement plus de chances d'en contenir un : la
+corrélation entre le score et la superficie vaut 0,55. Fontainebleau,
+172 km² de forêt, ressort donc très au-dessus de Melun et Barbizon, qui
+partagent pourtant sa météo et son FWI de 5,1.
 
-Le modèle a raison pour sa question. Dans les données observées, les plus
-grandes communes brûlent 20 fois plus souvent que les plus petites, mais
-seulement 3 fois plus par km². Cette vue répond au « le sol est-il dangereux
-ici », l'autre au « quelle commune surveiller ».
+L'écart entre les deux cartes est plus discret qu'on ne l'imagine : la
+corrélation de rang entre le score et le score par km² vaut 0,835. Le
+classement bouge, mais il ne se retourne pas.
+
+Dans les données observées, les plus grandes communes brûlent 20 fois plus
+souvent que les plus petites, mais seulement 3 fois plus par km². Cette vue
+répond au « le sol est-il dangereux ici », l'autre au « quelle commune
+surveiller ».
 """)
 
 st.divider()
