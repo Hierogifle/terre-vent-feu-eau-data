@@ -1,0 +1,29 @@
+# Dépendances de l'APPLICATION seule — pas du projet.
+#
+# ⚠️ POURQUOI CE FICHIER EXISTE À CÔTÉ DE pyproject.toml
+# `pyproject.toml` déclare de quoi reconstruire tout le projet : geopandas,
+# netCDF4, xarray, psycopg, statsmodels, torch… Rien de tout cela ne sert à
+# l'application, qui ne lit que des Parquet et un modèle XGBoost sérialisé.
+# Les installer sur la plateforme d'hébergement coûterait plusieurs minutes de
+# build et plusieurs centaines de mégaoctets, pour du code jamais exécuté.
+#
+# Streamlit Community Cloud lit `requirements.txt` en priorité : c'est donc
+# cette liste courte qui sera installée.
+#
+# Versions figées sur celles réellement testées en local.
+
+streamlit==1.59.2
+pandas==3.0.3
+numpy==2.4.6
+pyarrow==24.0.0          # lecture des Parquet
+xgboost==3.3.0           # les deux modèles servis
+pydeck==0.9.3            # la carte de chaleur
+matplotlib==3.11.0
+holidays==0.100          # jours fériés, une feature du modèle
+
+# ── explicabilité (page « Pourquoi un feu part ») ──────────────────────────
+scikit-learn==1.9.0
+scipy==1.18.0
+shap==0.52.0             # TreeSHAP : exact sur un modèle d'arbres
+lime==0.2.0.1            # substitut linéaire local, pour la comparaison
+dice-ml==0.12            # contrefactuels

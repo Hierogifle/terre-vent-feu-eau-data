@@ -1,9 +1,40 @@
 # Terre, Vent, Feu, Eau, Data
 
+[![Application](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://terre-vent-feu-eau-data.streamlit.app)
+[![Présentation](https://img.shields.io/badge/vitrine-hierogifle.github.io-e34948)](https://hierogifle.github.io/terre-vent-feu-eau-data/)
+[![CI](https://github.com/Hierogifle/terre-vent-feu-eau-data/actions/workflows/ci.yml/badge.svg)](https://github.com/Hierogifle/terre-vent-feu-eau-data/actions/workflows/ci.yml)
+
 Prédiction du risque de feu de forêt en France, à la maille **commune × jour**.
 
 Le projet croise cinq sources publiques dans une base PostgreSQL/PostGIS pour
 répondre à une question : *quel est le risque de feu de la commune X le jour J ?*
+
+**→ [Ouvrir l'application](https://terre-vent-feu-eau-data.streamlit.app)** ·
+**[la présentation du projet](https://hierogifle.github.io/terre-vent-feu-eau-data/)**
+
+![Carte du risque au 12 août 2024](docs/img/carte.png)
+
+Le modèle retrouve seul les Landes, l'arc méditerranéen, la Corse et le piémont
+pyrénéen — sans jamais voir de carte : ni `lat` ni `lon` ne font partie de ses
+variables.
+
+| | |
+|---|---|
+| grille commune × jour | **253 731 870** lignes, 2006-2025 |
+| taux de positifs | **0,019 %** — c'est ce qui commande toute la méthode |
+| performance sur le test | **×63,7** le hasard, mesuré une seule fois |
+| modèles comparés | **6**, avec intervalles de confiance appariés |
+| météo | **53 ans**, 21,9 M lignes, 1973-2025 |
+
+### Ce que l'application montre
+
+| Page | Contenu |
+|---|---|
+| **Carte** | carte de chaleur nationale, 1973 → 2100, 3 scénarios GIEC, et un mode rétrospectif qui compare deux modèles sur le jeu de test |
+| **Commune** | fiche détaillée : évolution par décennie, projections, type de territoire |
+| **Les données** | les 4 sources, la tendance sur 53 ans, stationnarité et SARIMAX |
+| **Les modèles** | protocole, les 6 modèles et leurs IC, le LSTM, v3 contre C, la calibration, et le bug d'alignement assumé |
+| **Pourquoi un feu part** | SHAP, LIME et DiCE — et pourquoi ils ne disent pas la même chose |
 
 ---
 

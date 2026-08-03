@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terre, Vent, Feu, Eau, Data — prédiction du risque de feu de forêt</title>
+<meta name="description" content="Prédire le risque de départ de feu pour chacune des 34 734 communes de France métropolitaine, chaque jour, de 1973 à 2100.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+<style>
+  :root{
+    --ink:#0b0b0b; --muted:#6b6963; --grid:#e1e0d9; --fond:#fcfcfb;
+    --rouge:#e34948; --orange:#eb6834; --bleu:#2a78d6; --vert:#1baf7a;
+    --gris:#c3c2b7;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--fond); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:0 24px}
+  a{color:var(--bleu)}
+
+  /* ── bandeau ─────────────────────────────────────────────── */
+  header{border-bottom:1px solid var(--grid); padding:64px 0 48px}
+  .kicker{
+    font-size:.8rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--rouge); font-weight:700; margin:0 0 14px
+  }
+  h1{font-size:clamp(2rem,5vw,3.1rem); line-height:1.1; margin:0 0 18px; letter-spacing:-.02em}
+  .chapo{font-size:1.18rem; color:var(--muted); max-width:64ch; margin:0 0 30px}
+  .cta{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+  .btn{
+    display:inline-block; padding:13px 24px; border-radius:8px;
+    text-decoration:none; font-weight:600; font-size:1rem; border:1px solid transparent
+  }
+  .btn-1{background:var(--rouge); color:#fff}
+  .btn-1:hover{background:#c93b3a}
+  .btn-2{border-color:var(--gris); color:var(--ink)}
+  .btn-2:hover{border-color:var(--ink)}
+  .note{font-size:.85rem; color:var(--muted); margin-top:14px}
+
+  /* ── chiffres ────────────────────────────────────────────── */
+  .stats{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:2px; background:var(--grid); border:1px solid var(--grid);
+    border-radius:10px; overflow:hidden; margin:44px 0
+  }
+  .stat{background:var(--fond); padding:20px 18px}
+  .stat b{display:block; font-size:1.75rem; line-height:1.15; letter-spacing:-.02em}
+  .stat span{font-size:.83rem; color:var(--muted)}
+
+  section{padding:52px 0; border-bottom:1px solid var(--grid)}
+  h2{font-size:1.6rem; margin:0 0 8px; letter-spacing:-.01em}
+  h2 + .sub{color:var(--muted); margin:0 0 26px; max-width:70ch}
+  h3{font-size:1.05rem; margin:26px 0 6px}
+  figure{margin:26px 0}
+  figure img{width:100%; height:auto; border:1px solid var(--grid); border-radius:8px; display:block}
+  figcaption{font-size:.86rem; color:var(--muted); margin-top:9px}
+
+  .cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:26px}
+  .card{border:1px solid var(--grid); border-radius:10px; padding:20px}
+  .card h3{margin-top:0}
+  .card p{margin:0; font-size:.94rem; color:var(--muted)}
+
+  table{border-collapse:collapse; width:100%; font-size:.93rem; margin:18px 0}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--grid)}
+  th{font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted)}
+  td.num{text-align:right; font-variant-numeric:tabular-nums}
+  tr.fort td{font-weight:700}
+
+  blockquote{
+    margin:24px 0; padding:16px 20px; border-left:3px solid var(--orange);
+    background:#fff; border-radius:0 8px 8px 0; color:var(--ink)
+  }
+  blockquote p{margin:0}
+  code{
+    background:#f2f1ec; padding:1px 5px; border-radius:4px;
+    font-size:.88em; font-family:ui-monospace,SFMono-Regular,Menlo,monospace
+  }
+  footer{padding:40px 0 64px; color:var(--muted); font-size:.9rem}
+  .tag{
+    display:inline-block; font-size:.76rem; padding:3px 9px; border-radius:20px;
+    border:1px solid var(--grid); color:var(--muted); margin:0 6px 6px 0
+  }
+
+  @media (prefers-color-scheme:dark){
+    :root{--ink:#ececea; --muted:#9b9992; --grid:#2b2b28; --fond:#131311; --gris:#3d3d38}
+    .card,blockquote{background:#191917}
+    code{background:#232320}
+    figure img{background:#fff}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">Projet de fin d'année · M1 Data / IA</p>
+    <h1>Où va-t-il brûler demain&nbsp;?</h1>
+    <p class="chapo">
+      Un modèle qui note le risque de départ de feu pour chacune des
+      <strong>34&nbsp;734 communes</strong> de France métropolitaine, chaque
+      jour, de 1973 à 2100 — et qui explique ses décisions.
+    </p>
+    <div class="cta">
+      <a class="btn btn-1" href="https://terre-vent-feu-eau-data.streamlit.app">Ouvrir l'application →</a>
+      <a class="btn btn-2" href="https://github.com/Hierogifle/terre-vent-feu-eau-data">Le code sur GitHub</a>
+    </div>
+    <p class="note">
+      L'application s'endort après une période d'inactivité : le premier
+      chargement peut prendre une trentaine de secondes.
+    </p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="stats">
+    <div class="stat"><b>253,7 M</b><span>lignes commune&nbsp;× jour</span></div>
+    <div class="stat"><b>0,019 %</b><span>de jours avec un feu</span></div>
+    <div class="stat"><b>×63,7</b><span>mieux que le hasard, sur le test</span></div>
+    <div class="stat"><b>6 modèles</b><span>comparés avec intervalles de confiance</span></div>
+    <div class="stat"><b>53 ans</b><span>de météo, 1973-2025</span></div>
+  </div>
+
+  <figure>
+    <img src="img/carte.png" alt="Carte de France du risque de feu au 12 août 2024">
+    <figcaption>
+      Le modèle retrouve seul les Landes, l'arc méditerranéen, la Corse et le
+      piémont pyrénéen. Il n'a jamais vu de carte : ni latitude, ni longitude
+      ne font partie de ses variables.
+    </figcaption>
+  </figure>
+
+  <section>
+    <h2>Le problème, et pourquoi il est difficile</h2>
+    <p class="sub">
+      Un départ de feu est un événement <strong>rare</strong> : 0,019 % des
+      couples commune-jour. À ce niveau, un modèle qui répond toujours
+      «&nbsp;non&nbsp;» a 99,98 % de justesse et ne sert à rien.
+    </p>
+
+    <div class="cols">
+      <div class="card">
+        <h3>La métrique</h3>
+        <p>La ROC-AUC est flatteuse et inutile ici. On mesure la
+        <strong>PR-AUC</strong>, qui vaut exactement le taux de base quand on
+        répond au hasard — le rapport des deux se lit directement.</p>
+      </div>
+      <div class="card">
+        <h3>La fuite de données</h3>
+        <p>À cette rareté, une fuite ne produit pas d'erreur : elle produit
+        d'excellentes métriques et un modèle sans valeur. Trois règles
+        explicites la préviennent, et des tests les vérifient.</p>
+      </div>
+      <div class="card">
+        <h3>Le découpage</h3>
+        <p><strong>Temporel, jamais aléatoire.</strong> Un découpage au hasard
+        mettrait le 14 juillet dans l'entraînement et le 15 dans le test — le
+        modèle «&nbsp;prédirait&nbsp;» un feu déjà vu à 20 km.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Six modèles, et deux conclusions contre-intuitives</h2>
+    <p class="sub">
+      Aucun écart de performance n'a été retenu sans intervalle de confiance.
+      Le bootstrap est <em>apparié</em> et rééchantillonne les communes, pas
+      les lignes&nbsp;: les jours d'une même commune ne sont pas indépendants.
+    </p>
+
+    <table>
+      <thead><tr>
+        <th>Modèle</th><th class="num">PR-AUC</th><th class="num">lift</th><th>vs XGBoost v3</th>
+      </tr></thead>
+      <tbody>
+        <tr class="fort"><td>XGBoost v3</td><td class="num">0,0177</td><td class="num">×73,4</td><td>référence</td></tr>
+        <tr><td>DART</td><td class="num">0,0174</td><td class="num">×72,0</td><td>−1,8 % — <em>non significatif</em></td></tr>
+        <tr><td>MLP</td><td class="num">0,0173</td><td class="num">×71,9</td><td>−1,9 % — <em>non significatif</em></td></tr>
+        <tr><td>XGBoost C · physique pure</td><td class="num">0,0112</td><td class="num">×46,4</td><td>−36,8 %</td></tr>
+        <tr><td>LSTM · 30 jours de météo</td><td class="num">0,0085</td><td class="num">×35,4</td><td>−51,7 %</td></tr>
+      </tbody>
+    </table>
+
+    <figure>
+      <img src="img/modeles.png" alt="PR-AUC des cinq modèles et intervalles de confiance appariés">
+      <figcaption>
+        Le résultat le plus utile est <strong>négatif</strong> : les
+        intervalles de DART et du MLP traversent zéro. Les trois premiers
+        modèles sont <strong>indiscernables</strong>. Annoncer
+        «&nbsp;XGBoost bat le MLP&nbsp;» aurait été une conclusion inventée à
+        partir du bruit.
+      </figcaption>
+    </figure>
+
+    <h3>1. Le meilleur modèle n'est pas celui qu'on déploie</h3>
+    <p>
+      XGBoost v3 fait <strong>×93,8</strong> sur le test contre ×63,7 pour le
+      modèle physique. Mais il tire 29 % de son importance de l'historique des
+      feux — or la BDIFF ne publie pas l'année en cours. Pour une prédiction
+      faite aujourd'hui, cette variable serait <strong>fausse</strong>, pas
+      imprécise. En validation croisée spatiale, sur un territoire jamais vu,
+      le modèle physique gagne dans <strong>9 régions sur 9</strong>.
+    </p>
+
+    <h3>2. Un LSTM correctement optimisé perd — et c'est explicable</h3>
+    <p>
+      25 essais Optuna, arrêt précoce, et il perd de <strong>23,6 %</strong>
+      [−33,5 ; −17,3] contre le modèle physique, à information égale. La raison
+      est physique : les indices <code>DC</code>, <code>DMC</code> et
+      <code>BUI</code> <em>sont déjà</em> des états récursifs — des moyennes
+      exponentielles de la météo passée à 52 et 15 jours de constante de
+      temps. Le CEMS livre l'état caché que le LSTM devrait réapprendre sur
+      9 176 exemples positifs.
+    </p>
+  </section>
+
+  <section>
+    <h2>Ce que les données disent vraiment</h2>
+    <figure>
+      <img src="img/tendance.png" alt="Tendance du FWI de 1973 à 2025 et des feux de 2006 à 2025">
+      <figcaption>
+        Le danger météo monte de façon incontestable sur 53 ans. Le nombre de
+        feux, lui, ne bouge pas sur 20 ans.
+      </figcaption>
+    </figure>
+    <blockquote><p>
+      Il serait malhonnête de ne montrer que le premier graphique. Le bon
+      énoncé est&nbsp;: «&nbsp;les conditions favorables aux feux augmentent
+      très significativement, et le nombre de départs reste stable — ce qui est
+      cohérent avec une prévention qui absorbe pour l'instant la hausse de
+      l'aléa.&nbsp;» C'est aussi pourquoi les projections à 2100 transportent
+      l'<strong>aléa</strong>, jamais le bilan.
+    </p></blockquote>
+  </section>
+
+  <section>
+    <h2>Une erreur, et comment elle a été trouvée</h2>
+    <p class="sub">
+      Le premier verdict du LSTM annonçait −97 %. Le vrai est −51,7 %.
+    </p>
+    <p>
+      La requête d'assemblage n'a pas d'<code>ORDER BY</code> : l'ordre des
+      38 millions de lignes que renvoie PostgreSQL dépend du plan d'exécution
+      et <strong>change d'une exécution à l'autre</strong>. Les fichiers de
+      prédictions ne portaient que <code>(score, cible)</code> — les comparer
+      revenait à les aligner par position. Même taille, même nombre de feux,
+      ordre différent&nbsp;: <strong>rien ne signale l'erreur</strong>.
+    </p>
+    <figure>
+      <img src="img/alignement.png" alt="Effet d'un désalignement de lignes sur la courbe de détection">
+      <figcaption>
+        Le bug reproduit volontairement : on permute les lignes, la PR-AUC
+        tombe de 0,0085 à 0,0002 — exactement la ligne du hasard, avec les
+        mêmes valeurs dans le fichier.
+      </figcaption>
+    </figure>
+    <blockquote><p>
+      Sur un événement à 0,024 %, une erreur de plomberie ne se manifeste
+      jamais par une exception. Elle se manifeste par un <strong>chiffre
+      plausible</strong>. Les seules défenses sont les invariants explicites et
+      les assertions qui échouent bruyamment.
+    </p></blockquote>
+  </section>
+
+  <section>
+    <h2>Comment c'est fait</h2>
+    <p>
+      <span class="tag">PostgreSQL 16 + PostGIS</span>
+      <span class="tag">Docker</span>
+      <span class="tag">XGBoost</span>
+      <span class="tag">PyTorch</span>
+      <span class="tag">Optuna</span>
+      <span class="tag">SHAP · LIME · DiCE</span>
+      <span class="tag">statsmodels</span>
+      <span class="tag">Streamlit</span>
+      <span class="tag">pytest</span>
+      <span class="tag">GitHub Actions</span>
+      <span class="tag">DVC</span>
+    </p>
+    <div class="cols">
+      <div class="card">
+        <h3>Les données</h3>
+        <p>CEMS/Copernicus (21,9 M lignes de météo), BDIFF (les feux
+        déclarés), CORINE Land Cover, et le référentiel INSEE — croisés sur le
+        code commune et une grille météo de 0,25°.</p>
+      </div>
+      <div class="card">
+        <h3>La base</h3>
+        <p>Une grille dense commune × jour de 253,7 M lignes, partitionnée par
+        année. Dense et non creuse&nbsp;: sans les jours sans feu, les fenêtres
+        glissantes seraient silencieusement fausses.</p>
+      </div>
+      <div class="card">
+        <h3>L'explicabilité</h3>
+        <p>TreeSHAP (exact sur un modèle d'arbres), LIME pour la comparaison,
+        et DiCE pour le contrefactuel — la seule question dont la réponse soit
+        actionnable.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      <a href="https://github.com/Hierogifle/terre-vent-feu-eau-data">Code source</a> ·
+      <a href="https://terre-vent-feu-eau-data.streamlit.app">Application</a> ·
+      <a href="https://github.com/Hierogifle/terre-vent-feu-eau-data/blob/main/docs/series-temporelles.md">Cours ACF / PACF / SARIMAX</a>
+    </p>
+    <p>
+      Sources ouvertes : Copernicus EMS, IGN/BDIFF, CORINE Land Cover, INSEE.
+      Projet réalisé à La Plateforme_, Marseille.
+    </p>
+  </footer>
+
+</div>
+</body>
+</html>
