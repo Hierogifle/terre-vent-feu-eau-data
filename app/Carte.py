@@ -60,11 +60,15 @@ with st.sidebar:
 
     st.markdown("### Quoi afficher")
     couche = st.radio(
-        "Couche", ["Risque prédit", "Danger météo (FWI)"], index=0,
+        "Couche",
+        ["Risque prédit", "Risque par km²", "Danger météo (FWI)"], index=0,
         disabled=retro,
-        help="Le risque croise météo, végétation et relief — c'est la sortie "
-             "du modèle. Le FWI est l'indice météo officiel EFFIS, sans "
-             "modèle. Les comparer montre ce que le territoire ajoute.")
+        help="Le **risque prédit** répond à « cette commune aura-t-elle un "
+             "feu aujourd'hui ». Une grande commune a mécaniquement plus de "
+             "chances d'en contenir un.\n\n"
+             "Le **risque par km²** divise ce score par la surface. Il répond "
+             "à « le sol est-il dangereux ici », et retire l'effet de taille.\n\n"
+             "Le **FWI** est l'indice météo officiel EFFIS, sans modèle.")
 
     st.markdown("### Quand")
     mode = "Une date précise" if retro else st.radio(
@@ -126,13 +130,30 @@ with st.sidebar:
 
 # ════════════════════════════════════════════════════════════════════════
 def poids_de(D: pd.DataFrame) -> pd.Series:
-    """La grandeur à colorier, normalisée dans [0,1].
+    """La grandeur à colorier, ramenée dans [0,1].
 
-    ⚠️ Le risque est normalisé **par rapport à la journée**, pas dans
-    l'absolu : la carte répond à « où regarder aujourd'hui ». Le FWI, lui, se
-    lit sur l'échelle EFFIS, dont 50 est le seuil extrême — donc pas de
-    normalisation relative, sinon un jour calme paraîtrait alarmant.
+    Le risque est normalisé par rapport à la journée : la carte répond à « où
+    regarder aujourd'hui ». Le FWI, lui, se lit sur l'échelle EFFIS dont 50
+    est le seuil extrême, donc pas de normalisation relative — sinon un jour
+    calme paraîtrait alarmant.
+
+    ⚠️ POURQUOI UNE VUE « PAR KM² » EXISTE.
+    La cible du modèle est « cette commune a-t-elle AU MOINS UN feu ce
+    jour-là ». Une commune de 172 km² a mécaniquement plus de chances d'en
+    contenir un qu'une de 6 km², et le modèle l'a appris : la corrélation
+    entre le score et la superficie vaut 0,55.
+
+    C'est juste, et c'est trompeur à l'œil. Fontainebleau ressort très sombre
+    au milieu de communes vertes qui partagent sa météo, uniquement parce
+    qu'elle est vaste. Diviser par la surface répond à l'autre question, celle
+    du danger au sol.
+
+    Le rang plutôt que la valeur brute : à cause des très grandes communes,
+    la distribution du score par km² est si écrasée qu'une normalisation
+    linéaire donnerait une carte uniformément verte.
     """
+    if couche.startswith("Risque par"):
+        return (D.score / D.superficie_km2.clip(lower=.5)).rank(pct=True)
     if couche.startswith("Risque"):
         return D.score / D.score.max()
     return (D.fwi / 50).clip(0, 1)
@@ -154,11 +175,22 @@ def couche_communes(D: pd.DataFrame):
     # couleur et la carte s'affiche vide. `.tolist()` rend des entiers
     # Python, qui passent.
     C["couleur"] = N.couleur_effis(C.poids.to_numpy()).tolist()
+    # `code_insee` voyage avec le polygone : c'est lui que renvoie deck.gl
+    # quand on clique, et qui permet d'ouvrir la bonne fiche.
     return pdk.Layer(
-        "PolygonLayer", C[["polygone", "couleur", "nom"]],
+        "PolygonLayer", C[["polygone", "couleur", "nom", "code_insee"]],
         get_polygon="polygone", get_fill_color="couleur",
         stroked=False, filled=True, extruded=False,
         pickable=True, auto_highlight=True)
+
+
+def ouvrir_fiche(etat):
+    """Si l'utilisateur a cliqué une commune, on bascule sur sa fiche."""
+    objs = (etat or {}).get("selection", {}).get("objects", {})
+    for lignes in objs.values():
+        if lignes:
+            st.session_state["commune"] = lignes[0]["code_insee"]
+            st.switch_page("pages/1_Commune.py")
 
 
 def carte(D: pd.DataFrame, titre: str, vue=None, hauteur=460):
@@ -354,19 +386,38 @@ if trouvees is not None and len(trouvees):
     vue = pdk.ViewState(latitude=float(sel.lat), longitude=float(sel.lon),
                         zoom=9)
 
-st.pydeck_chart(pdk.Deck(map_style="light", layers=couches,
-                         initial_view_state=vue, tooltip={"text": "{nom}"}),
-                height=560, width='stretch')
+etat = st.pydeck_chart(
+    pdk.Deck(map_style="light", layers=couches, initial_view_state=vue,
+             tooltip={"text": "{nom}"}),
+    height=560, width='stretch',
+    on_select="rerun", selection_mode="single-object", key="carte")
+ouvrir_fiche(etat)
 
 _manq = len(N.contours_manquants())
 st.caption(
-    f"Chaque commune est colorée sur **toute sa surface** — {legende}. "
-    f"Échelle EFFIS : vert → jaune → orange → rouge → noir. "
-    f"Survolez une commune pour la nommer."
-    + (f" ⚠️ {_manq} communes sur {N.nb(len(R))} n'ont pas de contour dans le "
+    f"Chaque commune est colorée sur toute sa surface : {legende}. "
+    f"Échelle EFFIS, du vert au noir. Survolez pour lire le nom, "
+    f"**cliquez pour ouvrir la fiche de la commune**."
+    + (f" {_manq} communes sur {N.nb(len(R))} n'ont pas de contour dans le "
        f"référentiel géographique et n'apparaissent pas : leur code a changé "
        f"entre le millésime du fond de carte et le COG 2026."
        if _manq else ""))
+
+if couche.startswith("Risque par"):
+    st.info("""
+Cette vue divise le score par la surface de la commune.
+
+Le modèle prédit « cette commune aura-t-elle au moins un feu aujourd'hui ». Une
+commune vaste a mécaniquement plus de chances d'en contenir un : la corrélation
+entre le score et la superficie vaut 0,55. Fontainebleau, 172 km² de forêt,
+ressort donc très au-dessus de Melun et Barbizon, qui partagent pourtant sa
+météo et son FWI de 5,1.
+
+Le modèle a raison pour sa question. Dans les données observées, les plus
+grandes communes brûlent 20 fois plus souvent que les plus petites — mais
+seulement 3 fois plus par km². Cette vue-ci répond au « le sol est-il dangereux
+ici », l'autre au « quelle commune surveiller ».
+""")
 
 # ── le résultat de la recherche ─────────────────────────────────────────
 if q:

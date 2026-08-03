@@ -95,14 +95,14 @@ with g1:
 
 with g2:
     a, b, c = st.columns(3)
-    a.metric("Population", f"{int(C.population or 0):,}".replace(",", " "))
-    b.metric("Superficie", f"{C.superficie_km2:.1f} km²")
+    a.metric("Population", N.nb(int(C.population or 0)))
+    b.metric("Superficie", f"{N.dec(C.superficie_km2)} km²")
     c.metric("Altitude moyenne",
              "—" if pd.isna(C.altitude_moy) else f"{int(C.altitude_moy)} m")
     a.metric("Feux enregistrés (2006-2025)", f"{int(C.feux)}")
     b.metric("Surface brûlée cumulée",
-             "—" if pd.isna(C.ha) else f"{C.ha:,.1f} ha".replace(",", " "))
-    c.metric("Distance à la côte", f"{C.distance_cote_km:.0f} km")
+             "—" if pd.isna(C.ha) else f"{N.nb(C.ha, 1)} ha")
+    c.metric("Distance à la côte", f"{N.nb(C.distance_cote_km)} km")
 
     # la composition du sol — ce qui fait la différence dans le modèle
     parts = {"maquis": C.part_maquis, "conifères": C.part_coniferes,
@@ -137,7 +137,7 @@ st.divider()
 # ════════════════════════════════════════════════════════════════════════
 st.markdown("### Le danger météo a-t-il augmenté ici ?")
 st.caption("FWI observé, décennie par décennie, sur la maille météo de la "
-           "commune. Ce sont des **mesures**, pas des projections — le CEMS "
+           "commune. Ce sont des mesures, pas des projections : le CEMS "
            "couvre 1973-2025.")
 
 D = N.decennies()
@@ -178,16 +178,22 @@ if len(D) >= 2:
     jv = d1.jours_danger - d0.jours_danger
     s1, s2 = st.columns(2)
     s1.metric(f"FWI moyen · {d0.periode} → {d1.periode}",
-              f"{d1.fwi_moyen:.2f}", f"{ev:+.0f} %")
+              N.dec(d1.fwi_moyen, 2), f"{ev:+.0f} %")
     s2.metric("Jours de danger élevé par an",
-              f"{d1.jours_danger:.1f}", f"{jv:+.1f} j")
+              N.dec(d1.jours_danger), f"{jv:+.1f} j")
+    # ⚠️ CES CHIFFRES SONT LUS, PAS RECOPIÉS. Cette légende annonçait
+    # « +45 %, p < 0,0001 » et « p = 0,13 », deux valeurs fausses restées en
+    # place parce qu'elles vivaient dans une chaîne de caractères.
+    _t = N.tendances()
+    _fwi = _t[_t.serie == "FWI moyen annuel"].iloc[0]
     st.caption(
-        "⚠️ Une commune n'est pas une tendance climatique : la variabilité "
-        "d'une décennie à l'autre est forte, et une hausse ici ne prouve rien "
-        "à elle seule. Sur l'ensemble de la France en revanche, la hausse est "
-        "établie : **+45 % de FWI moyen entre 1973 et 2025** (p < 0,0001). "
-        "Il a fallu cinquante ans pour l'établir — sur vingt ans seulement, "
-        "la variabilité d'une année à l'autre noie le signal (p = 0,13).")
+        f"Une commune ne fait pas une tendance climatique : la variabilité "
+        f"d'une décennie à l'autre est forte, et une hausse ici ne prouve "
+        f"rien à elle seule. Sur l'ensemble de la France en revanche, la "
+        f"hausse est établie : {N.dec(_fwi.variation_pct, 0)} % de FWI moyen "
+        f"entre {int(_fwi.an_min)} et {int(_fwi.an_max)}, avec "
+        f"p = {_fwi.p:.1e}. Il a fallu cinquante ans de mesures pour "
+        f"l'établir.")
 
 st.divider()
 
@@ -195,11 +201,39 @@ st.divider()
 #  3. et jusqu'en 2100 ?
 # ════════════════════════════════════════════════════════════════════════
 st.markdown("### Et jusqu'en 2100 ?")
-st.caption(
-    "Trois trajectoires d'émissions du GIEC. Elles sont **collées jusqu'en "
-    "2040** — le CO₂ déjà émis détermine les vingt prochaines années quoi "
-    "qu'on fasse — puis l'éventail s'ouvre. C'est la seconde moitié du siècle "
-    "que nos choix décident.")
+st.caption("Trois trajectoires d'émissions du GIEC, appliquées au danger "
+           "météo de cette commune.")
+
+with st.expander("Que veulent dire RCP 2.6, 4.5 et 8.5 ?"):
+    st.markdown("""
+Un RCP, pour *Representative Concentration Pathway*, est une trajectoire
+d'émissions de gaz à effet de serre. Le chiffre est le **forçage radiatif en
+2100**, en watts par mètre carré : l'énergie que la Terre reçoit en trop du
+fait de ces émissions. Plus il est élevé, plus elle se réchauffe.
+
+Ce ne sont pas des prévisions. Ce sont des hypothèses cohérentes, faites pour
+que tous les laboratoires du monde calculent la même chose et puissent
+comparer leurs résultats.
+""")
+    for sc in N.SCENARIOS:
+        d = N.RCP[sc]
+        st.markdown(
+            f"**{d['titre']}** — {d['forcage']}  \n"
+            f"{d['hypothese']}  \n"
+            f"Réchauffement attendu : {d['rechauffement']}.  \n"
+            f"<span style='color:{N.MUTED}'>{d['credibilite']}</span>",
+            unsafe_allow_html=True)
+    st.markdown(f"""
+**Pourquoi les trois courbes se confondent avant {N.AN_DIVERGENCE}.** Le CO₂
+déjà émis fixe les vingt prochaines années quoi qu'on fasse, et sur cette
+période l'écart entre trajectoires reste plus petit que la variabilité
+naturelle d'une année à l'autre. Sur nos propres facteurs, RCP 2.6 passe même
+au-dessus de RCP 8.5 en 2030 dans 59 % des mailles, l'écart moyen entre les
+deux valant −0,015. Ils ne se séparent vraiment qu'à partir de 2046.
+
+Ce n'est donc pas une anomalie de calcul. C'est la seconde moitié du siècle
+que nos choix décident.
+""")
 
 r1, r2, r3 = st.columns([1, 1, 2])
 mo = r1.selectbox("Mois de référence", range(1, 13), index=7,
@@ -217,48 +251,62 @@ if len(S) and "variante" not in S.columns:
     st.stop()
 
 if len(S):
-    fig, ax = plt.subplots(1, 2, figsize=(13.5, 4.2))
-    # Le passé ne dépend d'aucun scénario : on prend le premier qui en a,
-    # plutôt que d'exiger qu'un scénario précis le porte.
     obs = S[S.observe].drop_duplicates("annee").sort_values("annee")
 
-    for a, col, lab in ((ax[0], "fwi", "FWI"),
-                        (ax[1], "score", "risque prédit")):
-        # ── ce qui a été mesuré ──
-        a.plot(obs.annee, obs[col], lw=.9, color=N.MUTED, alpha=.40, zorder=2)
-        a.scatter(obs.annee, obs[col], s=11, color="#4a4a4a", zorder=3,
-                  label="mesuré, année par année")
+    fig, a = plt.subplots(figsize=(13.5, 5))
 
-        # ── l'éventail : une trajectoire par scénario ──
-        for sc in N.SCENARIOS:
-            ctr = S[(~S.observe) & (S.scenario == sc)
-                    & (S.variante == "centre")].sort_values("annee")
-            bas = S[(~S.observe) & (S.scenario == sc)
-                    & (S.variante == "bas")].sort_values("annee")
-            haut = S[(~S.observe) & (S.scenario == sc)
-                     & (S.variante == "haut")].sort_values("annee")
-            if not len(ctr):
-                continue
-            # la bande n'est dessinée que pour les deux extrêmes : trois
-            # bandes superposées deviennent illisibles
-            if sc in ("rcp2_6", "rcp8_5") and len(bas) and len(haut):
-                a.fill_between(ctr.annee, bas[col].to_numpy(),
-                               haut[col].to_numpy(), color=N.COUL_SC[sc],
-                               alpha=.10, zorder=1, lw=0)
-            a.plot(ctr.annee, ctr[col], lw=2.6, color=N.COUL_SC[sc], zorder=4,
-                   label=sc.upper().replace("_", "."))
+    # ⚠️ ÉCHELLE FIXE, IDENTIQUE POUR TOUTES LES COMMUNES.
+    # Un axe ajusté à chaque commune leur donnait toutes la même allure :
+    # Lille et Bormes-les-Mimosas paraissaient aussi menacées l'une que
+    # l'autre. On cale l'axe sur les classes officielles EFFIS, qui sont
+    # absolues et se lisent d'un coup d'œil.
+    HAUT = 60
+    bornes = [0] + N.SEUILS + [HAUT]
+    for i in range(len(bornes) - 1):
+        a.axhspan(bornes[i], min(bornes[i + 1], HAUT),
+                  color=N.COUL_EFFIS[i], alpha=.13, lw=0, zorder=0)
+        if bornes[i] < HAUT:
+            a.text(N.AN_OBS_MIN + .5, (bornes[i] + min(bornes[i + 1], HAUT)) / 2,
+                   N.CLASSES[i], fontsize=7.5, color=N.MUTED, va="center")
 
-        a.axvline(N.AN_OBS_MAX + .5, color=N.INK, ls="--", lw=1.1, zorder=6)
-        a.set_ylabel(lab)
-        a.set_ylim(bottom=0)
-        a.grid(color=N.GRID, lw=.7); a.set_axisbelow(True)
-        a.spines[["top", "right"]].set_visible(False)
-        a.legend(frameon=False, fontsize=7.5, loc="upper left")
+    a.plot(obs.annee, obs.fwi, lw=.9, color=N.MUTED, alpha=.45, zorder=2)
+    a.scatter(obs.annee, obs.fwi, s=13, color="#3a3a3a", zorder=3,
+              label="mesuré, année par année")
 
-    ax[0].set_title(f"Le danger météo un {jo} {MOIS[mo - 1]}", fontsize=10.5,
-                    weight="bold", loc="left")
-    ax[1].set_title("Le risque prédit par le modèle", fontsize=10.5,
-                    weight="bold", loc="left")
+    for sc in N.SCENARIOS:
+        p = {v: S[(~S.observe) & (S.scenario == sc) & (S.variante == v)]
+             .sort_values("annee") for v in ("centre", "bas", "haut")}
+        if not len(p["centre"]):
+            continue
+        if len(p["bas"]) and len(p["haut"]):
+            a.fill_between(p["centre"].annee, p["bas"].fwi.to_numpy(),
+                           p["haut"].fwi.to_numpy(), color=N.COUL_SC[sc],
+                           alpha=.16, zorder=1, lw=0)
+        a.plot(p["centre"].annee, p["centre"].fwi, lw=2.6,
+               color=N.COUL_SC[sc], zorder=4,
+               label=sc.upper().replace("_", "."))
+
+    a.axvline(N.AN_OBS_MAX + .5, color=N.INK, ls="--", lw=1.1, zorder=6)
+    a.text(N.AN_OBS_MAX + 1, HAUT * .96, " projeté →", fontsize=8.5,
+           color=N.MUTED, va="top")
+
+    # la zone où les scénarios ne se distinguent pas encore
+    if fin_an > N.AN_OBS_MAX:
+        a.axvspan(N.AN_OBS_MAX + .5, N.AN_DIVERGENCE, color="#8a8a8a",
+                  alpha=.10, lw=0, zorder=1)
+        a.text((N.AN_OBS_MAX + N.AN_DIVERGENCE) / 2, HAUT * .06,
+               "les trois scénarios\nsont indiscernables", fontsize=8,
+               color=N.MUTED, ha="center", va="bottom", style="italic")
+
+    a.set_ylim(0, HAUT)
+    a.set_xlim(N.AN_OBS_MIN, fin_an)
+    a.set_ylabel("FWI, indice de danger météo")
+    a.set_title(f"Un {jo} {MOIS[mo - 1]} ordinaire, de {N.AN_OBS_MIN} à "
+                f"{fin_an}", fontsize=11.5, weight="bold", loc="left")
+    a.grid(color=N.GRID, lw=.7, axis="x")
+    a.set_axisbelow(True)
+    a.spines[["top", "right"]].set_visible(False)
+    a.legend(frameon=False, fontsize=9, loc="upper left", ncols=4)
     plt.tight_layout()
     st.pyplot(fig, width="stretch")
     plt.close(fig)
@@ -275,17 +323,20 @@ if len(S):
                            f"vs 2011-2025")
             cols[i].caption(N.ETIQ_SC[sc].split(" — ")[1])
 
-    st.info(
-        f"**Comment lire.** À gauche du trait : ce qui a été **mesuré**, un "
-        f"{jo} {MOIS[mo - 1]} de chaque année depuis {N.AN_OBS_MIN}. À droite : "
-        f"ce que vaudrait un {jo} {MOIS[mo - 1]} **ordinaire** sous le climat "
-        f"de chaque année — pas une prévision de la météo de ce jour-là, qui "
-        f"est inconnaissable.\n\n"
-        f"Les **bandes** portent la variabilité d'une année à l'autre, qui ne "
-        f"disparaîtra pas : un {jo} {MOIS[mo - 1]} a valu entre "
-        f"{obs.fwi.min():.1f} et {obs.fwi.max():.1f} selon les années. "
-        f"Comparer une année exceptionnelle à une trajectoire moyenne n'aurait "
-        f"aucun sens.")
+    st.info(f"""
+À gauche du trait pointillé, ce qui a été mesuré : un {jo} {MOIS[mo - 1]} de
+chaque année depuis {N.AN_OBS_MIN}. À droite, ce que vaudrait un
+{jo} {MOIS[mo - 1]} ordinaire sous le climat de chaque année. Ce n'est pas une
+prévision de la météo de ce jour-là, qui restera inconnaissable.
+
+Les bandes colorées portent la variabilité d'une année sur l'autre, qui ne
+disparaîtra pas. Ici, un {jo} {MOIS[mo - 1]} a valu entre
+{N.dec(obs.fwi.min())} et {N.dec(obs.fwi.max())} selon les années : comparer
+une année exceptionnelle à une trajectoire moyenne n'aurait pas de sens.
+
+L'échelle va de 0 à {HAUT} pour toutes les communes, avec les classes
+officielles EFFIS en fond. Vous pouvez donc comparer deux fiches directement.
+""")
 
 sc = "rcp8_5"
 
@@ -294,22 +345,27 @@ if pd.notna(C.get(f"risque_{sc}")) and pd.notna(C.risque_fond):
     bouge = C.get(f"cluster_{sc}") != C.cluster_id
     fiable = bool(C.get(f"fiable_{sc}", True))
     st.markdown("##### Le type de territoire")
+    st.caption("Les 34 734 communes sont regroupées en 30 types, sur leur "
+               "végétation, leur relief et leur climatologie. Jamais sur les "
+               "feux. Un réchauffement peut faire passer une commune d'un "
+               "type à un autre.")
     if bouge:
         r = C[f"risque_{sc}"] / C.risque_fond
         st.markdown(
-            f"Sous le climat de 2041-2055, cette commune rejoint un **type de "
-            f"territoire différent** — celui de communes aujourd'hui "
-            f"{'plus' if r > 1 else 'moins'} exposées. "
-            f"Son risque de fond passerait de **{C.risque_fond:.5%}** à "
-            f"**{C[f'risque_{sc}']:.5%}**, soit **×{r:.1f}**.")
+            f"Sous le climat de 2041-2055 (RCP 8.5), cette commune rejoint un "
+            f"type de territoire différent, celui de communes aujourd'hui "
+            f"{'plus' if r > 1 else 'moins'} exposées. Son risque de fond "
+            f"passerait de {N.pct(C.risque_fond, 4)} à "
+            f"{N.pct(C[f'risque_{sc}'], 4)} par jour, soit **{N.dec(r)} fois** "
+            f"{'plus' if r > 1 else 'moins'}.")
         if not fiable:
             st.warning(
-                "⚠️ **Hors domaine d'analogie.** La combinaison « climat 2050 "
+                "**Hors domaine d'analogie.** La combinaison « climat 2050 "
                 "+ végétation actuelle » de cette commune n'a aucun équivalent "
                 "réel aujourd'hui. Le chiffre ci-dessus est une extrapolation "
                 "du regroupement, pas une comparaison à un territoire existant.")
     else:
         st.markdown(
-            f"Cette commune **reste dans le même type de territoire** sous le "
+            f"Cette commune reste dans le même type de territoire sous le "
             f"climat de 2041-2055. Son risque de fond est de "
-            f"**{C.risque_fond:.5%}** par jour.")
+            f"{N.pct(C.risque_fond, 4)} par jour.")

@@ -78,6 +78,48 @@ ETIQ_SC = {"rcp2_6": "RCP 2.6 — neutralité carbone ~2070",
            "rcp8_5": "RCP 8.5 — aucune politique climatique"}
 COUL_SC = {"rcp2_6": "#2a78d6", "rcp4_5": "#eb6834", "rcp8_5": "#b3121a"}
 
+# ⚠️ AVANT ~2045, LES TROIS SCÉNARIOS SONT INDISCERNABLES.
+# Mesuré sur nos propres facteurs : en 2030, RCP 2.6 passe au-dessus de
+# RCP 8.5 sur 59 % des mailles, et l'écart moyen entre les deux vaut −0,015,
+# c'est-à-dire rien. Ils ne se séparent qu'à partir de 2046.
+#
+# Ce n'est pas un défaut de calcul : le CO₂ déjà émis fixe les vingt
+# prochaines années, et avant 2040 la variabilité interne du climat dépasse
+# l'écart entre trajectoires d'émissions. L'affichage doit le dire, sinon un
+# lecteur y voit une incohérence.
+AN_DIVERGENCE = 2045
+
+RCP = {
+    "rcp2_6": {
+        "titre": "RCP 2.6 · le scénario optimiste",
+        "forcage": "2,6 W/m² en 2100",
+        "hypothese": "les émissions mondiales chutent dès maintenant et "
+                     "deviennent négatives avant 2070 : on retire plus de CO₂ "
+                     "qu'on n'en émet.",
+        "rechauffement": "+1,0 à +1,8 °C en 2100 par rapport à 1850-1900",
+        "credibilite": "compatible avec l'Accord de Paris. Il suppose un "
+                       "effort qui n'est engagé nulle part à cette échelle.",
+    },
+    "rcp4_5": {
+        "titre": "RCP 4.5 · le scénario intermédiaire",
+        "forcage": "4,5 W/m² en 2100",
+        "hypothese": "les émissions plafonnent vers 2040 puis décroissent, "
+                     "sans jamais devenir négatives.",
+        "rechauffement": "+1,7 à +3,2 °C en 2100",
+        "credibilite": "proche des trajectoires que dessinent les politiques "
+                       "actuellement annoncées.",
+    },
+    "rcp8_5": {
+        "titre": "RCP 8.5 · le scénario sans politique climatique",
+        "forcage": "8,5 W/m² en 2100",
+        "hypothese": "les émissions continuent de croître tout le siècle.",
+        "rechauffement": "+3,3 à +5,7 °C en 2100",
+        "credibilite": "longtemps utilisé comme référence haute. Aujourd'hui "
+                       "jugé peu probable, mais il reste utile comme borne "
+                       "supérieure.",
+    },
+}
+
 
 def hex_rgb(h: str) -> list[int]:
     return [int(h[i:i + 2], 16) for i in (1, 3, 5)]
