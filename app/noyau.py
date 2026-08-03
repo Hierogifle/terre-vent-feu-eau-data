@@ -125,20 +125,72 @@ def hex_rgb(h: str) -> list[int]:
     return [int(h[i:i + 2], 16) for i in (1, 3, 5)]
 
 
-def couleur_effis(poids) -> np.ndarray:
-    """Un poids dans [0,1] → une couleur RGB, sur le dégradé officiel EFFIS.
+# ⚠️ LA PALETTE EFFIS N'EST PAS MONOTONE EN LUMINANCE.
+# Mesuré : très faible 0,688 · faible 0,810 · modéré 0,523 · élevé 0,259 ·
+# très élevé 0,097 · extrême 0,008. Le jaune « faible » est plus CLAIR que le
+# vert « très faible ».
+#
+# Pour un lecteur qui s'appuie sur la clarté plutôt que sur la teinte — c'est
+# le cas en protanopie et en deutéranopie, environ un homme sur douze — les
+# deux premières classes sont donc inversées, et le rouge et le vert
+# apparaissent comme deux bruns voisins.
+#
+# C'est un défaut de la norme européenne, pas du code. On la garde par défaut
+# parce que toute l'application s'y réfère, et on propose YlOrRd en
+# alternative : palette ColorBrewer conçue et testée pour les déficiences de
+# vision des couleurs, à luminance strictement décroissante (0,97 → 0,05).
+PALETTES = {
+    "EFFIS": {
+        "couleurs": COUL_EFFIS,
+        "titre": "échelle officielle EFFIS",
+        "note": "la norme européenne. Ses deux premières classes sont "
+                "inversées en luminance, ce qui gêne la lecture en vision "
+                "des couleurs déficiente.",
+    },
+    "Accessible": {
+        "couleurs": ["#ffffcc", "#fee187", "#feab49", "#fc5b2e", "#d41020",
+                     "#800026"],
+        "titre": "palette accessible (ColorBrewer YlOrRd)",
+        "note": "luminance strictement décroissante, lisible en protanopie "
+                "et en deutéranopie. Elle perd le vert des classes basses.",
+    },
+}
 
-    Interpolation linéaire entre les six couleurs de l'échelle. On la calcule
-    ici plutôt que de laisser deck.gl le faire : `get_fill_color` accepte une
-    couleur par entité, et une colonne de couleurs déjà résolue évite d'avoir
-    à transporter une échelle et un domaine jusqu'au navigateur.
+
+def couleur(poids, palette: str = "EFFIS") -> np.ndarray:
+    """Un poids dans [0,1] → une couleur RGB, sur la palette demandée.
+
+    Interpolation linéaire entre les couleurs de l'échelle. On la calcule ici
+    plutôt que de laisser deck.gl le faire : `get_fill_color` accepte une
+    couleur par entité, et une colonne déjà résolue évite de transporter une
+    échelle et un domaine jusqu'au navigateur.
+
+    ⚠️ Rendre des entiers Python en aval, pas des tableaux NumPy : pydeck
+    sérialise la table en JSON et écrirait « [136 240 125] », sans virgules.
+    deck.gl reçoit alors une chaîne et ne colorie rien, sans lever d'erreur.
     """
     p = np.clip(np.asarray(poids, dtype=np.float64), 0, 1)
-    pal = np.array([hex_rgb(c) for c in COUL_EFFIS], dtype=np.float64)
+    pal = np.array([hex_rgb(c) for c in PALETTES[palette]["couleurs"]],
+                   dtype=np.float64)
     x = p * (len(pal) - 1)
     i = np.clip(np.floor(x).astype(int), 0, len(pal) - 2)
     t = (x - i)[:, None]
     return (pal[i] * (1 - t) + pal[i + 1] * t).round().astype(np.uint8)
+
+
+def couleur_effis(poids) -> np.ndarray:
+    """Conservé pour les appels existants. Voir `couleur()`."""
+    return couleur(poids, "EFFIS")
+
+
+# Des dates qui racontent quelque chose, plutôt que trois réglages à faire.
+DATES_REPERES = {
+    "Aujourd'hui": None,                       # résolu à l'affichage
+    "17 juillet 2022": (2022, 7, 17),          # incendies de Gironde
+    "15 août 2003": (2003, 8, 15),             # canicule
+    "15 août 2050": (2050, 8, 15),
+    "15 août 2100": (2100, 8, 15),
+}
 
 
 # ════════════════════════════════════════════════════════════════════════
