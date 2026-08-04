@@ -158,8 +158,11 @@ def main() -> None:
                 facecolor="#fcfcfb", bbox_inches="tight")
     plt.close(fig)
 
+    from statsmodels.tsa.stattools import acf as acf_f
     from statsmodels.tsa.stattools import pacf as pacf_f
+
     p_ = pacf_f(resid.dropna(), nlags=12, method="ywm")
+    a_ = acf_f(resid.dropna(), nlags=12)
     print(f"\n{'═' * 70}\nPACF DES RÉSIDUS — quel ordre AR ?\n{'═' * 70}")
     seuil = 1.96 / np.sqrt(len(resid))
     print(f"seuil de significativité ±{seuil:.4f}")
@@ -168,6 +171,19 @@ def main() -> None:
         print(f"  retard {k:>2}  {p_[k]:+.4f}  {marque}")
     ordre_ar = max([k for k in range(1, 11) if abs(p_[k]) > seuil] or [1])
     print(f"\n→ dernier retard significatif : {ordre_ar}")
+
+    # ⚠️ CES VALEURS ÉTAIENT AFFICHÉES ET JAMAIS SAUVEGARDÉES.
+    # L'argument central contre le LSTM — « l'autocorrélation est épuisée en
+    # deux à trois jours » — repose dessus, et il était cité dans deux pages
+    # de l'application sans qu'aucun artefact ne le soutienne. Même travers
+    # que la ROC-AUC du modèle « grand feu ».
+    pd.DataFrame({
+        "retard": range(1, 13),
+        "acf": a_[1:13],
+        "pacf": p_[1:13],
+        "seuil": seuil,
+        "significatif": np.abs(p_[1:13]) > seuil,
+    }).to_csv(PROCESSED / "series_acf_pacf.csv", index=False)
 
     # ── 3. SARIMAX ──────────────────────────────────────────────────────
     print(f"\n{'═' * 70}\nSARIMAX\n{'═' * 70}")

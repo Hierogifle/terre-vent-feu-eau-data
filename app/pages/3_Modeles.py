@@ -412,8 +412,10 @@ forme d'une cellule récurrente, sauf que les coefficients ont été calibrés p
 cinquante ans de science du feu plutôt qu'estimés sur 9 176 exemples positifs.
 
 Le CEMS livre donc déjà l'état caché que le LSTM devrait réapprendre. Deux
-observations vont dans le même sens : la PACF montre une autocorrélation
-épuisée en deux à trois jours, et un ARIMA sans exogène donne r = −0,118.
+observations vont dans le même sens : la PACF tombe de 0,70 au premier retard à
+0,08 au troisième, et un ARIMA sans exogène donne r = −0,118. Le tableau et les
+corrélogrammes sont sur la page *Les données*, onglet « Ce que le temps
+prédit ».
 
 Une réserve : le LSTM ne reçoit pas `danger_effis`, qui pèse 13,7 % dans le
 modèle physique. Les 23,6 % sont donc un majorant.

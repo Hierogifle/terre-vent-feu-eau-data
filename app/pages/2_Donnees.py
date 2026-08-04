@@ -382,6 +382,63 @@ des termes de Fourier en variable exogène. Quelques harmoniques suffisent pour
 un cycle annuel lisse. C'est le « X » de SARIMAX qui fait ce travail.
 """)
 
-    st.caption("Le détail, avec les corrélogrammes ACF et PACF et le choix des "
-               "ordres, est dans `notebook/series-lstm.ipynb` et le cours "
-               "`docs/series-temporelles.md`.")
+    st.divider()
+    st.markdown("##### Combien de jours de mémoire ? (ACF et PACF)")
+    st.markdown("""
+« Mémoire de deux à trois jours » : c'est l'argument sur lequel s'appuient à la
+fois le choix des ordres SARIMAX et le verdict sur le LSTM. Voici d'où il sort.
+
+L'ACF mesure la corrélation entre un jour et le jour *k* précédent. La PACF
+mesure la même chose une fois retiré ce qui passe par les jours intermédiaires
+— autrement dit l'apport propre du retard *k*. C'est elle qui dit combien de
+jours de passé un modèle autorégressif a besoin de garder.
+""")
+
+    try:
+        AP = pd.read_csv(N.DON / "series_acf_pacf.csv")
+        seuil = float(AP.seuil.iloc[0])
+        # découper AVANT d'assigner : sinon les colonnes construites depuis
+        # AP entier (12 lignes) ne correspondent plus à l'index tronqué.
+        A8 = AP.head(8)
+        g1, g2 = st.columns([1, 1])
+        with g1:
+            st.dataframe(A8.assign(**{
+                "Retard": A8.retard.map(lambda k: f"{k} jour" + "s" * (k > 1)),
+                "ACF": A8.acf.map(lambda v: N.dec(v, 3)),
+                "PACF": A8.pacf.map(lambda v: N.dec(v, 3)),
+                "Significatif": np.where(A8.significatif, "oui", "non"),
+            })[["Retard", "ACF", "PACF", "Significatif"]],
+                width="stretch", hide_index=True)
+            st.caption(f"Seuil de significativité ±{N.dec(seuil, 3)} sur "
+                       "7 305 jours, calculé sur les résidus du cycle annuel.")
+        with g2:
+            st.markdown(f"""
+Le premier retard porte presque tout : **{N.dec(AP.pacf.iloc[0], 2)}**. Le
+deuxième tombe à {N.dec(AP.pacf.iloc[1], 2)}, le troisième à
+{N.dec(AP.pacf.iloc[2], 2)}. Au-delà, on est dans le bruit.
+
+Nuance qui compte : les retards 4 à 8 restent *statistiquement* significatifs.
+Avec 7 305 points, le seuil descend à {N.dec(seuil, 3)} et presque tout passe.
+Significatif ne veut pas dire utile. Un coefficient de
+{N.dec(AP.pacf.iloc[7], 3)} au retard 8 n'explique rien : élevé au carré, il
+rend compte de {N.pct(AP.pacf.iloc[7] ** 2, 2)} de la variance.
+
+C'est le raisonnement qui a fixé AR(2) plutôt qu'un ordre plus élevé, et c'est
+aussi pourquoi une architecture faite pour retenir des séquences longues n'a
+rien à retenir ici.
+""")
+    except FileNotFoundError:
+        st.caption("`series_acf_pacf.csv` absent : lancer "
+                   "`python -m tvfed.series`.")
+
+    img = N.DON / "series_acf_pacf.png"
+    if img.exists():
+        st.image(str(img), width="stretch")
+        st.caption("En haut la série brute : l'ACF n'y montre que le cycle "
+                   "annuel, tout est corrélé à tout parce que c'est l'été. En "
+                   "bas, après retrait de la saisonnalité par termes de "
+                   "Fourier — les seules courbes exploitables pour choisir les "
+                   "ordres.")
+
+    st.caption("Le détail du raisonnement et le choix des ordres sont dans "
+               "`notebook/series-lstm.ipynb` et `docs/series-temporelles.md`.")

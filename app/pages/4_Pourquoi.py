@@ -100,10 +100,9 @@ if not (N.DON / "shap_c_alea.npy").exists():
 st.markdown("## Qu'est-ce qui fait partir un feu ?")
 
 st.markdown("""
-La question paraît simple. Elle a **trois réponses différentes**, et chacune
-est juste — mais pas à la même question. C'est le premier piège de
-l'interprétabilité, et il vaut la peine de s'y arrêter avant de regarder le
-moindre graphique.
+Trois mesures répondent à cette question et ne donnent pas le même classement.
+Ce n'est pas que l'une se trompe : elles ne mesurent pas la même chose. Autant
+le voir avant de lire les graphiques.
 """)
 
 V_A, X_A, COLS = shap_c("alea")
@@ -120,24 +119,24 @@ for c in ("gain", "alea", "sommet"):
 c1, c2, c3 = st.columns(3)
 c1.markdown("""
 ##### 1. L'importance par *gain*
-Combien chaque feature a réduit la perte **pendant l'entraînement**.
+Combien chaque variable a réduit la perte pendant l'entraînement.
 
-C'est ce que renvoie XGBoost par défaut. Biaisée vers les variables qui
-découpent proprement, et **aveugle à la redondance**.
+C'est la sortie par défaut de XGBoost. Elle penche vers les variables qui
+découpent proprement, et elle ne sait pas voir la redondance.
 """)
 c2.markdown("""
-##### 2. SHAP sur un échantillon **aléatoire**
-Combien chaque feature déplace le score **sur le territoire tel qu'il est** —
-99,97 % de communes-jours sans feu.
+##### 2. SHAP sur un échantillon aléatoire
+Combien chaque variable déplace le score sur le territoire tel qu'il est,
+c'est-à-dire 99,97 % de communes-jours sans feu.
 
-C'est la bonne lecture pour « en général ».
+La lecture à retenir pour « en général ».
 """)
 c3.markdown("""
-##### 3. SHAP sur le **sommet** du classement
-Combien elle déplace le score **là où le modèle s'engage**.
+##### 3. SHAP sur le sommet du classement
+Combien elle déplace le score là où le modèle s'engage.
 
-C'est la bonne lecture pour « quand ça brûle ». ⚠️ Sélectionner sur le score
-introduit un **biais de collision** — on ne lit ce panneau que pour ça.
+La lecture à retenir pour « quand ça brûle ». Sélectionner sur le score
+introduit un biais de collision : ce panneau ne sert qu'à cette question-là.
 """)
 
 # ── le graphique de comparaison ──────────────────────────────────────────
@@ -159,23 +158,23 @@ plt.close(fig)
 
 de = D.loc["danger_effis"]
 ma = D.loc["part_maquis"]
-st.warning(f"""
-**Deux désaccords qui valent d'être expliqués.**
+st.markdown(f"""
+##### Deux désaccords à expliquer
 
-**`classe de danger EFFIS`** est **{rang(de.r_gain)} par gain** ({de.gain:.1f} %) mais
-**{rang(de.r_alea)} par SHAP**. Ce n'est pas une erreur : c'est une discrétisation du
-FWI en six classes. XGBoost adore ces seuils nets pour découper, d'où un gain
-élevé — mais l'information est déjà dans le `FWI` continu, et SHAP en attribue
-donc le crédit au FWI. **L'importance par gain ne sait pas gérer la
-redondance.**
+La classe de danger EFFIS arrive {rang(de.r_gain)} par gain
+({N.dec(de.gain, 1)} %) et seulement {rang(de.r_alea)} par SHAP. C'est une
+discrétisation du FWI en six classes : XGBoost trouve ces seuils nets commodes
+pour découper, ce qui lui vaut un gain élevé, mais l'information est déjà dans
+le FWI continu et SHAP en attribue le crédit à ce dernier. Les deux mesures ne
+se contredisent pas, elles traitent la redondance différemment.
 
-**`part de maquis`** est **{rang(ma.r_gain)} par gain**, **{rang(ma.r_alea)}** sur
-l'échantillon aléatoire, et **{rang(ma.r_sommet)} au sommet**. Là encore tout est
-cohérent : le maquis ne change rien sur une commune-jour moyenne — il n'y en a
-pas — mais il devient déterminant **là où le modèle voit du risque**.
+La part de maquis arrive {rang(ma.r_gain)} par gain, {rang(ma.r_alea)} sur
+l'échantillon aléatoire et {rang(ma.r_sommet)} au sommet du classement. Sur une
+commune-jour tirée au hasard il n'y a pas de maquis, donc la variable ne déplace
+rien ; là où le modèle voit du risque, elle devient déterminante.
 
-*Morale* : ne jamais citer « la feature n°1 » sans dire de quelle mesure il
-s'agit et sur quelle population.
+Conséquence pratique : citer « la variable la plus importante » n'a pas de sens
+sans préciser quelle mesure et sur quelle population.
 """)
 
 st.divider()
@@ -189,9 +188,9 @@ pop = st.radio("Population", ["Le sommet du classement", "Un échantillon aléat
                horizontal=True, label_visibility="collapsed")
 V, X = (V_S, X_S) if pop.startswith("Le sommet") else (V_A, X_A)
 
-st.caption("Chaque point est une commune-jour. À droite du zéro, la variable "
-           "**augmente** le risque ; à gauche, elle le diminue. La couleur "
-           "donne la valeur de la variable — rouge = élevée, bleu = basse.")
+st.caption("Chaque point est une commune-jour. À droite du zéro la variable "
+           "augmente le risque, à gauche elle le diminue. La couleur donne la "
+           "valeur de la variable : rouge pour élevée, bleu pour basse.")
 
 ordre = pd.Series(np.abs(V).mean(0), index=COLS).nlargest(12).index[::-1]
 fig, ax = plt.subplots(figsize=(11.5, 5.4))
@@ -220,15 +219,13 @@ st.pyplot(fig, width='stretch')
 plt.close(fig)
 
 st.markdown("""
-**La lecture centrale du projet est visible ici.** Les variables de
-**territoire** — maquis, distance à la côte, superficie, relief — occupent le
-haut du classement à égalité avec les indices **météo**. Aucune des deux
-familles ne suffit seule :
+Les variables de territoire (maquis, distance à la côte, superficie, relief)
+occupent le haut du classement à égalité avec les indices météo. Ni l'une ni
+l'autre famille ne suffit seule : la météo situe le moment, le territoire situe
+le lieu.
 
-> *la météo dit **quand**, le territoire dit **où**.*
-
-C'est aussi ce que montrait la baseline : le danger EFFIS seul vaut ×5 le
-hasard, l'historique spatial seul ×19, et leur croisement ×42.
+Les baselines allaient déjà dans ce sens. Le danger EFFIS seul vaut 5 fois le
+hasard, l'historique spatial seul 19 fois, et leur croisement 42 fois.
 """)
 
 st.divider()
@@ -250,12 +247,12 @@ with s3:
 
 trouvees = N.chercher(q) if q else None
 if trouvees is None or not len(trouvees):
-    st.info("Aucune commune ne correspond — essayez « Bormes », « 83230 »…")
+    st.info("Aucune commune ne correspond. Essayez « Bormes » ou « 83230 ».")
     st.stop()
 
 sel = trouvees.iloc[0]
 date = pd.Timestamp(year=2024, month=int(mois), day=min(int(jour), 28))
-st.caption(f"**{sel.nom}** ({sel.dep_nom}) — {N.date_fr(date)}. "
+st.caption(f"{sel.nom} ({sel.dep_nom}), {N.date_fr(date)}. "
            f"L'année est fixée à 2024 : on explique le modèle, pas une "
            f"projection.")
 
@@ -304,14 +301,13 @@ with o1:
     ax.spines[["top", "right"]].set_visible(False)
     plt.tight_layout(); st.pyplot(fig, width='stretch'); plt.close(fig)
 
-    st.success("""
-**TreeSHAP est EXACT.** Sur un modèle à base d'arbres, il ne s'agit pas d'une
-approximation par échantillonnage : l'algorithme parcourt la structure des
-arbres et calcule la valeur de Shapley exacte, en temps polynomial. La somme
-des barres, plus la valeur de base, redonne **exactement** le score du modèle.
+    st.markdown("""
+Sur un modèle d'arbres, TreeSHAP ne procède pas par échantillonnage : il
+parcourt la structure des arbres et calcule la valeur de Shapley exacte, en
+temps polynomial. La somme des barres, ajoutée à la valeur de base, redonne le
+score du modèle au dixième de millionième près (vérifié à 9,5 × 10⁻⁷).
 
-C'est la raison pour laquelle SHAP est ici la référence, et LIME la
-comparaison.
+C'est pourquoi SHAP sert ici de référence et LIME de point de comparaison.
 """)
 
 # ── LIME ─────────────────────────────────────────────────────────────────
@@ -345,24 +341,23 @@ with o2:
         ax.spines[["top", "right"]].set_visible(False)
         plt.tight_layout(); st.pyplot(fig, width='stretch'); plt.close(fig)
 
-        st.info("""
-**LIME répond à une autre question, et il faut le dire.** Il perturbe le point,
-interroge le modèle des milliers de fois, et ajuste une **régression linéaire
-pondérée** sur ce voisinage. Ce qu'il rend n'est pas la contribution exacte : ce
-sont les coefficients d'un **modèle de substitution**.
+        st.markdown("""
+LIME ne répond pas à la même question. Il perturbe le point, interroge le
+modèle des milliers de fois, puis ajuste une régression linéaire pondérée sur
+ce voisinage. Ce qu'il renvoie n'est pas la contribution exacte mais les
+coefficients d'un modèle de substitution.
 
-Trois conséquences, toutes visibles ci-dessus :
+Trois conséquences, visibles sur le graphique ci-dessus :
 
-- les variables apparaissent sous forme de **règles** (`fwi > 12,4`), parce que
+- les variables apparaissent sous forme de règles (`fwi > 12,4`), parce que
   LIME discrétise ;
-- le résultat est **stochastique** — relancez, il bougera un peu ;
-- il dépend du **fond** qu'on lui donne, ici 30 000 lignes du train.
+- le résultat est stochastique : relancez, il bougera un peu ;
+- il dépend du fond qu'on lui fournit, ici 30 000 lignes du train.
 
-Sur un modèle d'arbres, **LIME ne peut pas être meilleur que SHAP** : il
-approxime ce que TreeSHAP calcule exactement. On le montre parce qu'il est
-partout dans la littérature, et parce que savoir *pourquoi on ne s'en sert pas*
-vaut mieux que de l'ignorer. Sur un modèle qu'on ne peut pas ouvrir — une API,
-un réseau profond — il redeviendrait le bon outil.
+Sur un modèle d'arbres, LIME approxime ce que TreeSHAP calcule exactement : il
+ne peut donc pas faire mieux. Il figure ici parce qu'il est très répandu et
+qu'il vaut mieux savoir pourquoi on ne l'a pas retenu. Sur un modèle qu'on ne
+peut pas ouvrir, une API ou un réseau profond, il redeviendrait le bon outil.
 """)
     except ImportError:
         st.warning("`lime` n'est pas installé : `uv pip install lime`.")
@@ -370,9 +365,9 @@ un réseau profond — il redeviendrait le bon outil.
 # ── DiCE ─────────────────────────────────────────────────────────────────
 with o3:
     st.markdown("""
-SHAP et LIME répondent à *« pourquoi ce score ? »*. **DiCE répond à
-*« qu'aurait-il fallu changer ? »*** — et c'est la seule question dont la
-réponse soit actionnable.
+SHAP et LIME répondent à « pourquoi ce score ». DiCE répond à « qu'aurait-il
+fallu changer », qui est la seule des trois questions dont la réponse se
+traduise en décision.
 """)
     try:
         import dice_ml
@@ -429,15 +424,14 @@ réponse soit actionnable.
         # recommandation de plantation.
         dedans = ligne.score >= seuil
         st.caption(
-            f"Cette commune est au **{100 * ligne.rang:.1f}ᵉ percentile** du "
+            f"Cette commune est au {N.dec(100 * ligne.rang, 1)}ᵉ percentile du "
             f"jour ; le décile le plus à risque commence à un score de "
-            f"{seuil:.4f}. "
-            + (f"Elle **est dedans** : DiCE cherche donc ce qu'il faudrait "
-               f"changer pour l'en **faire sortir**."
+            f"{N.dec(seuil, 4)}. "
+            + ("Elle est dedans : DiCE cherche ce qu'il faudrait changer pour "
+               "l'en faire sortir."
                if dedans else
-               f"Elle **est en dehors** : DiCE cherche donc, à l'inverse, ce "
-               f"qui l'y **ferait entrer**. Les signes se lisent dans ce "
-               f"sens-là."))
+               "Elle est en dehors : DiCE cherche à l'inverse ce qui l'y "
+               "ferait entrer, et les signes se lisent dans ce sens-là."))
 
         cg, cd = st.columns([1, 3])
         n_cf = cg.slider("Combien de scénarios", 1, 5, 3)
@@ -461,17 +455,16 @@ réponse soit actionnable.
                     res = None
             if res is None or not len(res):
                 st.error(f"""
-**Aucun contrefactuel trouvé** — et c'est un résultat, pas un échec.
+Aucun contrefactuel trouvé. C'est une réponse, pas une panne.
 
-Sur ces leviers-là, rien ne fait
-{'sortir' if dedans else 'entrer'} **{sel.nom}**
+Sur les leviers autorisés, rien ne fait
+{'sortir' if dedans else 'entrer'} {sel.nom}
 {'du' if dedans else 'dans le'} décile à risque. Son exposition ne tient pas à
 ce qu'on peut modifier : elle tient à sa position, à son relief, à sa
-superficie. Le risque est **structurel**.
+superficie.
 
-Élargissez la liste des variables pour voir ce qu'il faudrait vraiment
-changer — et mesurez à quel point ce serait irréaliste. C'est précisément ce
-qu'un contrefactuel apprend.
+Élargir la liste des variables montre ce qu'il faudrait changer pour y
+parvenir, et à quel point ce serait hors de portée.
 """)
             else:
                 cols = modifiables or FEATURES
@@ -487,19 +480,19 @@ qu'un contrefactuel apprend.
                            "variation à appliquer pour que la commune sorte "
                            "du décile le plus à risque.")
         st.warning("""
-⚠️ **Un contrefactuel n'est pas une recommandation.** DiCE trouve un point
-proche que le modèle classe différemment. Rien ne garantit que ce point soit
-**réalisable** — on ne convertit pas 40 % de maquis en terres agricoles — ni
-que le lien soit **causal** : le modèle a appris des corrélations sur
-2006-2019, pas des mécanismes.
+Un contrefactuel n'est pas une recommandation. DiCE trouve un point proche que
+le modèle classe différemment, sans garantir qu'il soit réalisable : on ne
+convertit pas 40 % de maquis en terres agricoles. Rien ne garantit non plus que
+le lien soit causal, le modèle ayant appris des corrélations sur 2006-2019 et
+non des mécanismes.
 
-C'est pour cette raison que la liste des variables modifiables est un choix
-explicite, laissé à l'utilisateur, et non un réglage caché.
+C'est la raison pour laquelle la liste des variables modifiables est un choix
+explicite laissé à l'utilisateur, et non un réglage caché.
 """)
     except ImportError:
         st.warning("`dice-ml` n'est pas installé : `uv pip install dice-ml`.")
 
 st.divider()
-st.caption("SHAP calculé sur le modèle C (41 features) — celui qui dessine la "
-           "carte. Le projet dispose aussi d'un SHAP du modèle v3 : "
+st.caption("SHAP calculé sur le modèle C (41 features), celui qui dessine la "
+           "carte. Le projet dispose aussi d'un SHAP du modèle v3, mais "
            "l'afficher ici décrirait un modèle que vous ne voyez jamais.")
