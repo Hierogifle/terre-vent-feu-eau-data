@@ -1,12 +1,66 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Terre, Vent, Feu, Eau, Data · prédiction du risque de feu de forêt</title>
-<meta name="description" content="Estimer le risque de départ de feu pour chacune des 34 734 communes de France métropolitaine, chaque jour, de 1973 à 2100.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
-<style>
+"""Étape 26 — la vitrine GitHub Pages, générée.
+
+    python -m tvfed.vitrine
+
+────────────────────────────────────────────────────────────────────────────
+POURQUOI GÉNÉRER PLUTÔT QU'ÉCRIRE LE HTML À LA MAIN
+────────────────────────────────────────────────────────────────────────────
+La page était écrite à la main, avec ses chiffres en dur dans le balisage.
+C'est précisément le défaut qui a laissé « +45 % de FWI » vivre des semaines
+dans l'application : une chaîne de caractères que rien ne recalcule ne se
+trompe jamais bruyamment, elle vieillit en silence.
+
+Le diaporama lisait déjà ses chiffres à la source. La vitrine le fait
+maintenant aussi, depuis les mêmes CSV. Relancer `tvfed.comparer` puis cette
+commande suffit à remettre les deux d'aplomb.
+
+Le fichier produit est `docs/index.html`, servi par GitHub Pages une fois
+l'option activée dans Settings → Pages → Deploy from a branch → main /docs.
+"""
+from __future__ import annotations
+
+import json
+
+import pandas as pd
+
+from .paths import PROCESSED, RACINE
+
+SORTIE = RACINE / "docs" / "index.html"
+
+DEPOT = "https://github.com/Hierogifle/terre-vent-feu-eau-data"
+APPLI = "https://terre-vent-feu-eau-data.streamlit.app"
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  mise en forme française
+# ════════════════════════════════════════════════════════════════════════
+def nb(x, dec=0):
+    """Séparateur de milliers insécable, comme le reste du projet."""
+    return f"{x:,.{dec}f}".replace(",", " ").replace(".", ",")
+
+
+def dec(x, n=1):
+    return f"{x:.{n}f}".replace(".", ",").replace("-", "−")
+
+
+def pct(x, n=1):
+    return f"{dec(x, n)} %"
+
+
+def _lire() -> dict:
+    d = {}
+    for nom in ("pr_auc_val", "comparaison_appariee", "baselines",
+                "transfert_spatial", "test_par_annee", "series_acf_pacf",
+                "operationnel_test", "modele_c_test", "series_sarimax"):
+        f = PROCESSED / f"{nom}.csv"
+        d[nom] = pd.read_csv(f) if f.exists() else None
+    d["meta"] = json.loads(
+        (RACINE / "app" / "donnees" / "meta.json").read_text(encoding="utf-8"))
+    d["tendances"] = pd.read_csv(RACINE / "app" / "donnees" / "tendances.csv")
+    return d
+
+
+CSS = """
   :root{
     --ink:#0b0b0b; --muted:#6b6963; --grid:#e1e0d9; --fond:#fcfcfb;
     --rouge:#e34948; --orange:#eb6834; --bleu:#2a78d6; --vert:#1baf7a;
@@ -107,7 +161,73 @@
     code{background:#232320}
     figure img{background:#fff}
   }
-</style>
+"""
+
+
+def construire(D: dict) -> str:
+    mt = D["meta"]
+    ap = D["pr_auc_val"].iloc[0].to_dict()
+    cmp_ = D["comparaison_appariee"]
+    ten = D["tendances"]
+    taux_val = 0.0002410
+
+    def ec(ref, mod):
+        return cmp_[(cmp_.reference == ref) & (cmp_.modele == mod)].iloc[0]
+
+    def tend(nom):
+        return ten[ten.serie == nom].iloc[0]
+
+    b = D["baselines"].set_index("predicteur").lift
+    lift_hist = b.filter(like="historique commune").iloc[0]
+    lift_meteo = b.filter(like="danger EFFIS").iloc[0]
+    lift_croise = b.filter(like="historique ×").iloc[0]
+
+    ts = D["transfert_spatial"]
+    n_reg = len(ts)
+    n_gagne = int((ts["C · physique"] > ts["A · tout"]).sum())
+    gain_max = 100 * (ts["C · physique"] / ts["A · tout"] - 1).max()
+
+    l_c = ec("XGBoost C", "LSTM")
+    dart, mlp = ec("XGBoost v3", "DART"), ec("XGBoost v3", "MLP")
+
+    fwi_ete = tend("FWI moyen juin-septembre")
+    jours = tend("jours de danger élevé (FWI > 21,3)")
+    feux = tend("communes-jours en feu")
+
+    acf = D["series_acf_pacf"]
+    op = D["operationnel_test"]
+    op1 = op[op.budget == 0.01].iloc[0] if op is not None else None
+
+    # ── le tableau des modèles, dans l'ordre décroissant ────────────────
+    rangs = sorted(ap, key=ap.get, reverse=True)
+    lignes = []
+    for nom in rangs:
+        if nom == "XGBoost v3":
+            verdict, cls = "référence", ' class="fort"'
+        else:
+            e = ec("XGBoost v3", nom)
+            verdict = (f"{dec(e.ecart_pct)} % · "
+                       + ("significatif" if e.significatif
+                          else "<em>non significatif</em>"))
+            cls = ""
+        etiquette = {"XGBoost C": "XGBoost C · physique pure",
+                     "LSTM": "LSTM · 30 jours de météo"}.get(nom, nom)
+        lignes.append(
+            f'        <tr{cls}><td>{etiquette}</td>'
+            f'<td class="num">{dec(ap[nom], 4)}</td>'
+            f'<td class="num">×{dec(ap[nom] / taux_val)}</td>'
+            f'<td>{verdict}</td></tr>')
+    tableau = "\n".join(lignes)
+
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terre, Vent, Feu, Eau, Data · prédiction du risque de feu de forêt</title>
+<meta name="description" content="Estimer le risque de départ de feu pour chacune des 34 734 communes de France métropolitaine, chaque jour, de 1973 à 2100.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+<style>{CSS}</style>
 </head>
 <body>
 
@@ -121,8 +241,8 @@
       2100, et qui rend compte de ses décisions.
     </p>
     <div class="cta">
-      <a class="btn btn-1" href="https://terre-vent-feu-eau-data.streamlit.app">Ouvrir l'application →</a>
-      <a class="btn btn-2" href="https://github.com/Hierogifle/terre-vent-feu-eau-data">Le code sur GitHub</a>
+      <a class="btn btn-1" href="{APPLI}">Ouvrir l'application →</a>
+      <a class="btn btn-2" href="{DEPOT}">Le code sur GitHub</a>
     </div>
     <p class="note">
       L'application s'endort après une période d'inactivité : le premier
@@ -136,8 +256,8 @@
   <div class="stats">
     <div class="stat"><b>253,7&nbsp;M</b><span>lignes commune&nbsp;× jour</span></div>
     <div class="stat"><b>0,019&nbsp;%</b><span>de jours avec un feu</span></div>
-    <div class="stat"><b>×63,7</b><span>mieux que le hasard, sur le test</span></div>
-    <div class="stat"><b>5 modèles</b><span>comparés avec intervalles de confiance</span></div>
+    <div class="stat"><b>×{dec(mt['test']['lift'])}</b><span>mieux que le hasard, sur le test</span></div>
+    <div class="stat"><b>{len(rangs)} modèles</b><span>comparés avec intervalles de confiance</span></div>
     <div class="stat"><b>53 ans</b><span>de météo, 1973-2025</span></div>
   </div>
 
@@ -206,8 +326,8 @@
     <p>
       Il faut aussi savoir contre quoi l'on se bat. Trois prédicteurs sans
       aucun apprentissage servent de référence : l'historique de la commune
-      seul vaut déjà ×19,4 le hasard, le danger météo seul
-      ×5,1, et leur croisement ×42,1. C'est la
+      seul vaut déjà ×{dec(lift_hist)} le hasard, le danger météo seul
+      ×{dec(lift_meteo)}, et leur croisement ×{dec(lift_croise)}. C'est la
       barre à battre, et non le hasard.
     </p>
   </section>
@@ -226,11 +346,7 @@
         <th>Modèle</th><th class="num">PR-AUC</th><th class="num">lift</th><th>vs XGBoost v3</th>
       </tr></thead>
       <tbody>
-        <tr class="fort"><td>XGBoost v3</td><td class="num">0,0177</td><td class="num">×73,4</td><td>référence</td></tr>
-        <tr><td>DART</td><td class="num">0,0174</td><td class="num">×72,0</td><td>−1,8 % · <em>non significatif</em></td></tr>
-        <tr><td>MLP</td><td class="num">0,0173</td><td class="num">×71,9</td><td>−1,9 % · <em>non significatif</em></td></tr>
-        <tr><td>XGBoost C · physique pure</td><td class="num">0,0112</td><td class="num">×46,4</td><td>−36,8 % · significatif</td></tr>
-        <tr><td>LSTM · 30 jours de météo</td><td class="num">0,0085</td><td class="num">×35,4</td><td>−51,7 % · significatif</td></tr>
+{tableau}
       </tbody>
     </table></div>
 
@@ -246,20 +362,20 @@
 
     <h3>1. Le meilleur modèle n'est pas celui qui est déployé</h3>
     <p>
-      XGBoost v3 fait ×93,8 sur le test contre
-      ×63,7 pour le modèle physique. Mais il tire
+      XGBoost v3 fait ×{dec(mt['modele_a']['lift'])} sur le test contre
+      ×{dec(mt['test']['lift'])} pour le modèle physique. Mais il tire
       29&nbsp;% de son importance de l'historique des feux, et la BDIFF ne
       publie pas l'année en cours. Pour une prédiction faite aujourd'hui,
       cette variable ne serait pas imprécise : elle serait fausse. En
       validation croisée spatiale, sur un territoire retiré de
-      l'entraînement, le modèle physique gagne dans 9 régions sur
-      9, jusqu'à 137&nbsp;% de mieux.
+      l'entraînement, le modèle physique gagne dans {n_gagne} régions sur
+      {n_reg}, jusqu'à {dec(gain_max, 0)}&nbsp;% de mieux.
     </p>
     <p>
       L'écart de performance est d'ailleurs moins coûteux qu'il n'en a l'air.
       En surveillant 1&nbsp;% des communes-jours, le modèle déployé couvre
-      42 % des départs, et
-      les 37 % de PR-AUC qui
+      {pct(100 * op1.rappel, 0) if op1 is not None else "42 %"} des départs, et
+      les {pct(abs(ec('XGBoost v3', 'XGBoost C').ecart_pct), 0)} de PR-AUC qui
       séparent les deux modèles ne valent que trois points de rappel à ce
       budget, et plus rien du tout à 10&nbsp;%.
     </p>
@@ -267,8 +383,8 @@
     <h3>2. Un LSTM correctement optimisé perd, et c'est explicable</h3>
     <p>
       25 essais Optuna, arrêt précoce, et il perd de
-      23,6 % [−33,5&nbsp;;
-      −17,3] contre le modèle physique, à information égale. La
+      {pct(abs(l_c.ecart_pct))} [{dec(l_c.ic_bas)}&nbsp;;
+      {dec(l_c.ic_haut)}] contre le modèle physique, à information égale. La
       raison est physique : les indices <code>DC</code>, <code>DMC</code> et
       <code>BUI</code> sont déjà des états récursifs, des moyennes
       exponentielles de la météo passée à 52 et 15 jours de constante de
@@ -277,8 +393,8 @@
     </p>
     <p>
       Deux méthodes indépendantes disent la même chose. La PACF des résidus
-      tombe de 0,70 au
-      premier retard à 0,08
+      tombe de {dec(acf.pacf.iloc[0], 2) if acf is not None else "0,70"} au
+      premier retard à {dec(acf.pacf.iloc[2], 2) if acf is not None else "0,08"}
       au troisième : la mémoire utile de la série est de deux à trois jours. Et
       un ARIMA sans variable exogène donne une corrélation négative, alors
       qu'ajouter le FWI fait tomber l'erreur de 37&nbsp;%.
@@ -297,9 +413,9 @@
     <div class="tw"><table>
       <thead><tr><th>Série</th><th class="num">Période</th><th class="num">Variation</th><th>Verdict</th></tr></thead>
       <tbody>
-        <tr><td>FWI moyen juin-septembre</td><td class="num">1973-2025</td><td class="num">+62&nbsp;%</td><td>significatif</td></tr>
-        <tr><td>Jours de danger élevé</td><td class="num">1973-2025</td><td class="num">+197&nbsp;%</td><td>significatif</td></tr>
-        <tr class="fort"><td>Communes-jours en feu</td><td class="num">2006-2025</td><td class="num">+3&nbsp;%</td><td>non significatif</td></tr>
+        <tr><td>FWI moyen juin-septembre</td><td class="num">{fwi_ete.an_min}-{fwi_ete.an_max}</td><td class="num">+{dec(fwi_ete.variation_pct, 0)}&nbsp;%</td><td>significatif</td></tr>
+        <tr><td>Jours de danger élevé</td><td class="num">{jours.an_min}-{jours.an_max}</td><td class="num">+{dec(jours.variation_pct, 0)}&nbsp;%</td><td>significatif</td></tr>
+        <tr class="fort"><td>Communes-jours en feu</td><td class="num">{feux.an_min}-{feux.an_max}</td><td class="num">+{dec(feux.variation_pct, 0)}&nbsp;%</td><td>non significatif</td></tr>
       </tbody>
     </table></div>
     <blockquote><p>
@@ -317,7 +433,7 @@
     <h2>Une erreur, et comment elle a été trouvée</h2>
     <p class="sub">
       Le premier verdict du LSTM annonçait −97&nbsp;%. Le vrai est
-      −51,7&nbsp;%.
+      {dec(ec('XGBoost v3', 'LSTM').ecart_pct)}&nbsp;%.
     </p>
     <p>
       La requête d'assemblage n'a pas d'<code>ORDER BY</code> : l'ordre des
@@ -383,10 +499,10 @@
 
   <footer>
     <p>
-      <a href="https://github.com/Hierogifle/terre-vent-feu-eau-data">Code source</a> ·
-      <a href="https://terre-vent-feu-eau-data.streamlit.app">Application</a> ·
-      <a href="https://github.com/Hierogifle/terre-vent-feu-eau-data/blob/main/docs/series-temporelles.md">Cours ACF / PACF / SARIMAX</a> ·
-      <a href="https://github.com/Hierogifle/terre-vent-feu-eau-data/blob/main/presentation/script.md">Script de soutenance</a>
+      <a href="{DEPOT}">Code source</a> ·
+      <a href="{APPLI}">Application</a> ·
+      <a href="{DEPOT}/blob/main/docs/series-temporelles.md">Cours ACF / PACF / SARIMAX</a> ·
+      <a href="{DEPOT}/blob/main/presentation/script.md">Script de soutenance</a>
     </p>
     <p>
       Sources ouvertes : Copernicus EMS, IGN/BDIFF, CORINE Land Cover, INSEE.
@@ -401,3 +517,17 @@
 </div>
 </body>
 </html>
+"""
+
+
+def main() -> None:
+    D = _lire()
+    html = construire(D)
+    SORTIE.parent.mkdir(parents=True, exist_ok=True)
+    SORTIE.write_text(html, encoding="utf-8", newline="\n")
+    print(f"✅ {SORTIE.relative_to(RACINE)} — "
+          f"{len(html) / 1024:.1f} ko")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,898 +1,1032 @@
-# Script de soutenance — Terre, Vent, Feu, Eau, Data
+# Script de soutenance · Terre, Vent, Feu, Eau, Data
 
-> Ce document accompagne `soutenance.pptx` (31 diapositives). Il contient
-> **ce qu'il faut dire**, diapositive par diapositive, plus ce que la
-> diapositive ne montre pas et qu'un jury peut demander.
->
-> **Durée visée : 20 minutes** de présentation + 10 de questions. Les
-> diapositives marquées ⏩ peuvent être sautées si le temps manque.
->
-> Les chiffres de ce document et ceux du diaporama viennent des **mêmes
-> fichiers** (`data/processed/*.csv`). Si vous relancez un entraînement,
-> relancez `python -m tvfed.diaporama` : le diaporama se met à jour seul.
+Support : `presentation/soutenance.pptx`, 37 diapositives.
+Durée visée : 25 minutes, plus 10 à 15 minutes de questions.
+
+Ce document donne, pour chaque diapositive, ce qu'il y a à dire, ce qu'il faut
+éviter de dire, et les détails à garder en réserve pour les questions. Le
+texte entre guillemets est un appui, pas une récitation.
+
+Le diaporama suit un plan scientifique : introduction, question de recherche,
+méthodologie, résultats, interprétation. Les résultats n'arrivent qu'une fois
+la question et le protocole posés, ce qui permet de répondre à « comment
+savez-vous que c'est vrai » avant qu'on ne le demande.
+
+Les chiffres de ce document et ceux du diaporama viennent des mêmes fichiers
+`data/processed/*.csv`. Après un réentraînement, `python -m tvfed.diaporama`
+remet le support à jour tout seul.
 
 ---
 
 ## Table des matières
 
-| § | Diapos | Sujet |
-|---|---|---|
-| [0](#0--avant-de-commencer) | — | Avant de commencer |
-| [1](#1--le-problème-diapos-1-à-5) | 1-5 | Le problème |
-| [2](#2--le-protocole-diapos-6-à-9) | 6-9 | Le protocole |
-| [3](#3--les-modèles-diapos-10-à-20) | 10-20 | Les modèles |
-| [4](#4--comprendre-le-modèle-diapos-21-à-23) | 21-23 | Comprendre le modèle |
-| [5](#5--le-climat-diapos-24-à-26) | 24-26 | Le climat |
-| [6](#6--rigueur-diapos-27-à-31) | 27-31 | Rigueur, application, limites |
-| [A](#annexe-a--fiche-de-chaque-modèle) | — | **Fiche de chaque modèle** |
-| [B](#annexe-b--questions-attendues-et-réponses) | — | **Questions attendues** |
-| [C](#annexe-c--glossaire) | — | Glossaire |
+- [Avant de commencer](#avant-de-commencer)
+- [01 · Introduction](#01--introduction-diapos-2-à-4)
+- [02 · Question de recherche](#02--question-de-recherche-diapos-5-à-7)
+- [03 · Méthodologie](#03--méthodologie-diapos-8-à-15)
+- [04 · Résultats](#04--résultats-diapos-16-à-29)
+- [05 · Interprétation](#05--interprétation-diapos-30-à-37)
+- [Annexe A · Fiche de chaque modèle](#annexe-a--fiche-de-chaque-modèle)
+- [Annexe B · Questions attendues](#annexe-b--questions-attendues)
+- [Annexe C · Glossaire](#annexe-c--glossaire)
+- [Annexe D · Commandes](#annexe-d--commandes)
 
 ---
 
-## 0 · Avant de commencer
+## Avant de commencer
 
-### La phrase qui résume tout
+### La phrase qui résume le travail
 
-> « J'ai construit un modèle qui note le risque de départ de feu pour chacune
-> des 34 734 communes françaises, chaque jour. Il fait **63,7 fois mieux que
-> le hasard** sur une période qu'il n'a jamais vue. Mais le résultat dont je
-> suis le plus content est **négatif** : j'ai montré que trois de mes six
-> modèles sont indiscernables, alors que leurs scores semblaient les
-> départager. »
+> « J'ai construit un modèle qui estime, pour chacune des 34 734 communes de
+> France métropolitaine et pour chaque jour, la probabilité qu'un départ de
+> feu y soit déclaré. Il tourne sur 253 millions de lignes, il fait 64 fois
+> mieux que le hasard sur une période qu'il n'a jamais vue, et le modèle que
+> j'ai déployé n'est délibérément pas le plus performant que j'aie obtenu. »
 
-### Les trois choses à ne pas rater
+La dernière proposition est celle qui ouvre la discussion. Laissez-la faire.
 
-1. **La rareté commande tout** — 0,019 % de positifs. Chaque décision
-   méthodologique en découle. Si le jury ne retient qu'une chose, c'est ça.
-2. **Le meilleur modèle n'est pas le déployable** — et la raison n'est pas
-   dans les métriques, elle est dans la disponibilité de la donnée.
-3. **On assume les erreurs** — quatre bugs sérieux trouvés et corrigés, dont
-   un qui rendait une comparaison entière fausse. Les montrer est un
-   avantage, pas un aveu.
+### Les trois points à ne pas manquer
 
-### Ce qu'il ne faut PAS dire
+1. La comparaison de modèles avec intervalles de confiance, diapo 20. Trois
+   des cinq modèles comparés sont indiscernables entre eux, et le dire est un
+   résultat.
+2. Le choix de déployer le modèle le moins performant, diapo 24. La décision
+   se prend sur la disponibilité de la donnée, pas sur la métrique.
+3. Le LSTM qui perd, avec une explication physique, diapos 21 à 23. Trois
+   familles de méthodes concordent.
 
-| ❌ Ne pas dire | ✅ Dire |
+### Ce qu'il faut éviter de dire
+
+| Ne pas dire | Dire à la place |
 |---|---|
-| « les feux augmentent » | « les conditions favorables augmentent ; le nombre de départs reste stable » |
-| « mon modèle prédit les feux de 2050 » | « il donne le risque d'un jour ordinaire sous le climat de 2050 » |
-| « XGBoost est meilleur que le MLP » | « les deux sont indiscernables, l'intervalle traverse zéro » |
-| « le modèle est précis à 99,98 % » | « l'accuracy n'a aucun sens ici ; on mesure la PR-AUC » |
-| « le LSTM n'a pas marché » | « le LSTM perd de 23,6 %, et voici pourquoi c'était prévisible » |
+| « les feux augmentent » | « les conditions favorables aux feux augmentent ; le nombre de départs reste stable sur nos 20 années » |
+| « le modèle prédit les feux de 2050 » | « le modèle applique le climat de 2050 à un jour ordinaire ; ce n'est pas une prévision météo » |
+| « 99 % de précision » | « le lift : 64 fois mieux que le hasard » |
+| « XGBoost bat le MLP » | « leurs intervalles se recouvrent, je ne peux pas les départager » |
+| « mon modèle est fiable à X % » | « il classe bien, il ne quantifie pas ; c'est pourquoi l'application affiche un rang » |
 
 ---
 
-## 1 · Le problème (diapos 1 à 5)
+## 01 · Introduction (diapos 2 à 4)
 
-### Diapo 1 — Titre
+### Diapo 2 · Section
 
-**À l'écran** : le titre, et la carte de France du 12 août 2024.
+Transition, deux secondes. Ne rien ajouter au titre.
 
-**À dire** (30 s) :
-
-> « Ce projet répond à une question opérationnelle : *où faut-il envoyer les
-> moyens de surveillance demain ?* La carte que vous voyez est une sortie
-> réelle du modèle, pour le 12 août 2024. Il retrouve les Landes, l'arc
-> méditerranéen, la Corse et le piémont pyrénéen — et je précise tout de
-> suite qu'il **n'a jamais vu de carte** : ni la latitude ni la longitude ne
-> font partie de ses variables. Il reconstruit cette géographie à partir de
-> la végétation, du relief et de la météo. »
-
-> 💡 C'est une bonne accroche : elle prouve immédiatement que le modèle a
-> appris quelque chose de physique, pas un code postal.
-
-### Diapo 2 — Section « Le problème »
-
-Transition. Rien à dire, ou une phrase : « Commençons par ce qui rend ce
-problème difficile. »
-
-### Diapo 3 — La rareté
-
-**À l'écran** : 0,019 % en très gros.
+### Diapo 3 · Le phénomène
 
 **À dire** (1 min 30) :
 
-> « Sur les 253 millions de couples commune-jour de la période 2006-2025,
-> **0,019 %** comptent au moins un départ de feu. Ça a trois conséquences.
+> « Voici les 52 809 feux déclarés sur le périmètre, cumulés par jour de
+> l'année sur 53 ans. On voit le pic d'août, celui qu'on attend : l'arc
+> méditerranéen, la Corse, un été sec.
 >
-> D'abord, **l'accuracy est inutilisable** : un modèle qui répond toujours
-> "non" a 99,98 % de justesse et ne sert à rien.
+> Le second pic, en mars, est moins connu. Il ne concerne ni les mêmes
+> régions ni la même végétation : le Sud-Ouest et le Massif central, avec des
+> landes et des herbacées sèches avant la reprise, souvent des écobuages qui
+> échappent.
 >
-> Ensuite, et c'est plus grave, **une fuite de données ne produit pas
-> d'erreur**. Elle produit d'excellentes métriques et un modèle sans valeur.
-> Personne ne vous prévient.
->
-> Enfin, ce déséquilibre commande tout le reste : la métrique, la façon
-> d'échantillonner, la calibration, et jusqu'à la manière de comparer deux
-> modèles. »
+> Conséquence directe pour la modélisation : un modèle qui n'apprendrait que
+> l'été raterait environ un feu sur cinq. La saisonnalité doit entrer comme
+> variable, pas comme filtre. »
 
-### Diapo 4 — Les quatre sources
+**Si on demande quels départements** : Cantal, 52 % de ses feux hors saison
+estivale ; Dordogne, 44 % ; Lozère, 41 %. Ces parts sont recalculées dans
+l'application, page *Les données*, à partir des données et non citées de
+mémoire.
+
+**Précaution** : ce sont des parts, pas des volumes. En valeur absolue, la
+Haute-Corse, la Gironde et l'Hérault dominent, y compris hors été. Confondre
+les deux lectures est une erreur facile à commettre, et je l'ai commise une
+fois en écrivant l'application.
+
+### Diapo 4 · Ce qui existe déjà, et ce qui manque
 
 **À dire** (1 min 30) :
 
-> « Quatre sources publiques, croisées sur le code INSEE et sur une grille
-> météo de 0,25 degré.
+> « Le danger météo est déjà un service public : EFFIS au niveau européen,
+> Météo-France en France. Il ne s'agit pas de le remplacer, mais de partir de
+> là où il s'arrête.
 >
-> Le CEMS de Copernicus donne huit indices de danger par jour et par maille,
-> sur 53 ans — 21,9 millions de lignes. La BDIFF de l'IGN donne les feux
-> déclarés. CORINE donne l'occupation du sol. L'INSEE donne le référentiel des
-> communes.
+> Ce système mesure l'inflammabilité de l'air et du combustible, sur une
+> maille de 0,25°, soit environ 28 km. À l'intérieur d'une même maille on
+> trouve en moyenne 31 communes, qui reçoivent aujourd'hui le même indice de
+> danger, qu'elles soient couvertes de maquis ou entièrement bétonnées.
 >
-> Le point délicat n'est pas le volume, c'est **les fusions de communes**.
-> 965 feux portent un code INSEE qui n'existe plus. J'ai d'abord essayé de les
-> rapprocher par le nom : ça donnait des faux positifs — "Chirac", en Lozère,
-> renvoyait vers une commune de Charente. J'ai donc téléchargé le fichier
-> officiel des mouvements de communes de l'INSEE, et j'ai écarté les 30 cas
-> irrécupérables **en les comptant**. Injecter une fausse géolocalisation
-> aurait été pire que perdre 0,68 % des feux : ça aurait corrompu la cible, le
-> voisinage et les features CORINE de communes innocentes. »
+> C'est cet écart que le projet cherche à combler. La météo dit quand, elle
+> ne dit pas où. »
 
-> 💡 C'est le premier moment où vous montrez que vous avez préféré la
-> justesse à la complétude. Insistez-y.
-
-### Diapo 5 — La grille dense
-
-**À dire** (1 min) :
-
-> « La table centrale est une grille **commune × jour** : une ligne par
-> commune et par jour, qu'il y ait eu un feu ou non. 253 millions de lignes.
->
-> On me demande souvent pourquoi ne pas se contenter de la liste des 52 809
-> feux. Parce qu'une série creuse rendrait les **fenêtres glissantes
-> silencieusement fausses**. "Nombre de feux dans les 30 jours précédents" se
-> calcule en remontant 30 lignes ; si les jours sans feu sont absents, on
-> remonte en réalité plusieurs années. C'est la raison technique numéro un
-> d'avoir matérialisé 253 millions de lignes plutôt que 52 809. »
+**Ne pas dire** que le FWI serait insuffisant ou dépassé. Il est l'entrée
+principale du modèle, et les baselines montrent qu'il porte un signal réel.
+L'apport est une résolution spatiale, pas une correction.
 
 ---
 
-## 2 · Le protocole (diapos 6 à 9)
+## 02 · Question de recherche (diapos 5 à 7)
 
-### Diapo 6 — Section
+### Diapo 5 · Section
 
-> « Avant de parler de modèles, je vais parler du protocole. C'est lui qui
-> protège le résultat. »
+Transition.
 
-### Diapo 7 — La barrière du split
+### Diapo 6 · La question
 
 **À dire** (2 min) :
 
-> « Le découpage est **temporel**, jamais aléatoire.
+> « La question est la suivante : peut-on estimer, à l'échelle du couple
+> commune × jour, la probabilité qu'un départ de feu soit déclaré, à partir
+> des seules données publiques disponibles en temps réel ?
 >
-> Le train, 2006 à 2019 : 177 millions de lignes. Tout ce qui a un `.fit()`
-> s'ajuste ici et nulle part ailleurs.
+> La fin de la phrase est une contrainte que je me suis imposée, et elle a
+> décidé du modèle déployé. J'y reviens en détail.
 >
-> La validation, 2020 à 2022 : c'est là que je choisis. Hyperparamètres,
-> sélection du modèle, calibration, comparaisons.
->
-> Le test, 2023 à 2025 : je l'ai ouvert **une seule fois**, après avoir tout
-> gelé. Aucune décision n'en découle.
->
-> Pourquoi pas un découpage aléatoire ? Parce qu'il mettrait le 14 juillet
-> 2019 dans le train et le 15 dans le test. Le modèle "prédirait" un feu qu'il
-> a déjà vu, à vingt kilomètres et un jour d'écart.
->
-> Et j'ai une règle qui tranche les cas douteux : **une feature datée peut
-> regarder tout le passé, y compris celui de sa propre période d'évaluation ;
-> une statistique non datée ne peut regarder que le train.** Concrètement :
-> "feux des 30 jours précédents" au 3 août 2023 lit juillet 2023 — ce n'est
-> pas une fuite, le 3 août à 8 h du matin on connaît juillet. En revanche
-> "taux moyen de la commune sur toute la période" lit le futur : c'en est
-> une. »
+> J'ai décliné cette question en quatre hypothèses, chacune formulée pour
+> pouvoir être réfutée. »
 
-### Diapo 8 — PR-AUC
+Puis lire le tableau, en insistant sur H3 :
+
+> « H3 dit qu'une architecture séquentielle n'apporte rien de plus que des
+> indices physiques agrégés. Je l'ai formulée dans ce sens, mais je l'ai
+> testée dans les deux : si le LSTM avait gagné, je l'aurais déployé. Le
+> résultat n'était pas décidé à l'avance. »
+
+**Point de méthode à revendiquer** : chaque hypothèse est associée à une
+mesure précise, décidée avant de regarder le résultat. C'est ce qui distingue
+une expérience d'une exploration.
+
+### Diapo 7 · Ce qui rend la question difficile
 
 **À dire** (1 min 30) :
 
-> « La ROC-AUC est flatteuse et inutile ici : les vrais négatifs écrasent
-> tout, et un modèle médiocre affiche 0,95.
+> « Un départ de feu concerne 0,019 % des couples commune × jour. Trois
+> conséquences.
 >
-> La **PR-AUC** a une propriété qui la rend lisible : quand on répond au
-> hasard, elle vaut **exactement le taux de base**. Le rapport des deux — que
-> j'appelle le **lift** — se lit donc directement : "le modèle est N fois
-> meilleur que tirer au sort". C'est un nombre qu'on peut dire à voix haute
-> devant un décideur. »
-
-> ⚠️ Si on vous demande « et le F1 ? » : le F1 exige de choisir un seuil, et
-> le bon seuil dépend du budget de surveillance, qui n'est pas une donnée du
-> problème. La PR-AUC intègre tous les seuils.
-
-### Diapo 9 — Le prior déplacé
-
-**À dire** (1 min 30) :
-
-> « Le train est sous-échantillonné à un positif pour dix négatifs — sans
-> quoi l'entraînement serait ingérable sur 177 millions de lignes.
+> Répondre systématiquement non donne 99,98 % de justesse, et ne sert à rien.
+> L'exactitude est inutilisable ici, et je n'en montrerai aucune.
 >
-> Conséquence : le modèle apprend sur un monde où 9,1 % des jours sont des
-> jours de feu, alors que le vrai taux est 0,019 %. Un facteur **487**.
+> Deuxièmement, une fuite de données ne provoque pas d'erreur : elle produit
+> d'excellentes métriques et un modèle sans valeur. Rien, dans les scores, ne
+> la signale. C'est le risque principal de ce type de problème.
 >
-> Trois garde-fous. D'abord, **validation et test ne sont jamais
-> échantillonnés** : c'est ce qui rend les scores comparables au monde réel.
-> Ensuite, **toutes les statistiques dérivées de la cible se calculent sur le
-> train complet**, pas sur l'échantillon — sinon un lissage bayésien vaudrait
-> 9,1 % au lieu de 0,019 %, et rien dans les métriques ne le signalerait.
-> Enfin, la **calibration** absorbe le décalage : la méthode de Platt ramène
-> le biais de ×144,7 à ×1,13, sans rien coûter en PR-AUC. »
+> Troisièmement, ce déséquilibre commande tout le reste : la métrique,
+> l'échantillonnage, la calibration, et jusqu'à la façon de comparer deux
+> modèles entre eux. »
+
+Cette diapositive justifie par avance toute la méthodologie. La poser
+correctement évite d'avoir à se justifier cinq fois ensuite.
 
 ---
 
-## 3 · Les modèles (diapos 10 à 20)
+## 03 · Méthodologie (diapos 8 à 15)
 
-### Diapo 10 — Section
+### Diapo 8 · Section
 
-### Diapo 11 — Les baselines
+Transition.
 
-**À dire** (1 min) :
-
-> « Avant de montrer un chiffre, il faut dire contre quoi on se bat.
->
-> Trois prédicteurs sans aucun apprentissage, mesurés sur la même validation.
-> L'historique spatial seul vaut déjà **×19**. La météo seule, via le danger
-> EFFIS officiel, vaut **×5**. Leur croisement, **×42**.
->
-> C'est ça, la barre à battre — pas le hasard. Un modèle qui ferait ×30 serait
-> **moins bon qu'une règle de trois**. »
-
-### Diapo 12 ⏩ — Du v1 au v3
+### Diapo 9 · Quatre sources publiques
 
 **À dire** (1 min 30) :
 
-> « Ma première version tirait 54,6 % de son importance de l'historique de la
-> commune. Elle disait surtout : *ce qui a brûlé rebrûlera*.
+> « Quatre sources publiques : les indices de danger du CEMS Copernicus, les
+> feux déclarés de la BDIFF, l'occupation du sol CORINE, et le référentiel
+> INSEE des communes.
 >
-> Ce n'est pas une fuite — le jour J on connaît réellement le passé — mais ça
-> laissait un trou : une commune qui n'a jamais brûlé gardait un score bas,
-> même entourée de communes qui brûlent chaque été. C'est le problème
-> classique de *small area estimation*.
+> Le point délicat n'est pas le volume, ce sont les fusions de communes. 965
+> feux portent un code INSEE qui n'existe plus. J'ai d'abord essayé de les
+> rapprocher par le nom, et cela produisait des faux positifs : Chirac en
+> Lozère renvoyait vers la Charente.
 >
-> La parade : regrouper les communes qui se ressemblent **physiquement** —
-> trente groupes formés sur la végétation, le relief, la densité humaine et la
-> climatologie, **sans jamais regarder le feu** — puis faire retomber chaque
-> commune vers le taux de son groupe, à proportion de ce qu'on sait d'elle.
+> J'ai donc téléchargé le fichier officiel des mouvements de communes de
+> l'INSEE. Les 30 cas restants sont écartés et comptés, jamais devinés. »
+
+**Pourquoi ce choix, si on demande** : une heuristique par le nom aurait
+« résolu » tous les cas, et corrompu au passage la cible, le voisinage et les
+variables CORINE de communes qui n'avaient rien à voir. Perdre 0,68 % des
+feux coûte moins cher que d'en inventer.
+
+### Diapo 10 · La table centrale
+
+**À dire** (1 min 30) :
+
+> « La table centrale a une ligne par commune et par jour, qu'il y ait eu un
+> feu ou non. 253 millions de lignes pour 49 130 feux.
 >
-> Le gain mesuré est de **+1,3 %** de PR-AUC. Réel, mais modeste — et à peine
-> significatif au bootstrap. Je le dis parce que c'est un résultat : ce
-> clustering, qui m'a demandé le plus de travail, rapporte **quatre fois
-> moins** que le simple réglage des hyperparamètres. »
+> On peut se demander pourquoi ne pas garder la seule liste des feux. La
+> raison est technique et précise : une série creuse rend les fenêtres
+> glissantes silencieusement fausses. « Feux des 30 jours précédents » se
+> calcule en remontant 30 lignes ; si les jours sans feu sont absents, on
+> remonte en réalité plusieurs années, et rien ne lève d'erreur. »
 
-### Diapo 13 — Les six modèles
+**En réserve** : PostgreSQL 16 avec PostGIS, 20 partitions annuelles. Le
+partitionnement par année suit le découpage des splits, ce qui rend les
+requêtes d'évaluation peu coûteuses.
 
-**À dire** (1 min) — *lire le tableau sans le commenter* :
+### Diapo 11 · La barrière du split
 
-> « Voici les six modèles sur la même validation : 38 millions de
-> communes-jours, 9 176 feux.
+**À dire** (2 min) :
+
+> « Le découpage est temporel, jamais aléatoire. Train 2006-2019, validation
+> 2020-2022, test 2023-2025.
 >
-> Je ne commente volontairement pas ce classement. Un écart de PR-AUC ne veut
-> rien dire sans intervalle de confiance — c'est l'objet de la diapositive
-> suivante. »
+> Un découpage aléatoire mettrait le 14 juillet 2019 dans le train et le 15
+> dans le test. Le modèle prédirait un feu qu'il a déjà vu, à 20 km et un
+> jour d'écart. La métrique serait excellente et le modèle sans valeur.
+>
+> J'ai eu besoin d'une règle pour trancher les cas douteux, parce qu'ils sont
+> nombreux. La voici : une variable datée peut regarder tout le passé, y
+> compris celui de sa propre période d'évaluation. Une statistique non datée
+> ne peut regarder que le train. »
 
-### Diapo 14 — Le graphique en forêt ⭐
+**L'exemple qui rend la règle claire** : « feux des 30 jours précédents » au
+3 août 2023 lit juillet 2023, et ce n'est pas une fuite, parce que le 3 août
+à 8 h du matin on connaît juillet. En revanche, « taux moyen de la commune
+sur toute la période » lit le futur, et c'en est une.
 
-**C'est la diapositive la plus importante de la soutenance.**
+**Sur le test** : ouvert une seule fois, après gel complet du modèle, des
+variables et de la calibration. Si on demande pourquoi une telle rigidité :
+le risque d'un jeu de test est cumulatif, chaque coup d'œil en apprend un
+peu, et les décisions suivantes en sont insensiblement informées.
+
+### Diapo 12 · Pourquoi PR-AUC
+
+**À dire** (1 min 30) :
+
+> « À 0,019 % de positifs, le choix de la métrique décide de ce qu'on croit
+> avoir réussi.
+>
+> La ROC-AUC vaut 0,50 au hasard quel que soit le déséquilibre, et sur un
+> problème aussi déséquilibré elle est flatteuse : un modèle médiocre affiche
+> 0,95 sans difficulté.
+>
+> La PR-AUC vaut exactement le taux de base au hasard. Le rapport entre les
+> deux donne le lift : combien de fois mieux que tirer au sort. C'est un
+> nombre qui se dit à voix haute. »
+
+**Question fréquente, pourquoi pas l'exactitude** : répondre par le chiffre,
+99,98 % de justesse en répondant toujours non.
+
+### Diapo 13 · Le piège du sous-échantillonnage
+
+**À dire** (2 min) :
+
+> « Le train est réduit à un positif pour dix négatifs, sans quoi
+> l'entraînement serait ingérable. Cela crée un piège que je veux exposer,
+> parce qu'il est invisible.
+>
+> Le prior appris vaut 9,1 %, le prior réel 0,019 % : un facteur 487.
+>
+> Trois conséquences. La validation et le test ne sont jamais échantillonnés,
+> ce qui rend les scores comparables au monde réel. Les statistiques dérivées
+> de la cible se calculent sur le train complet, jamais sur l'échantillon :
+> sur l'échantillon, un lissage bayésien vaudrait 9,1 % au lieu de 0,019 %,
+> le prior serait empoisonné, et rien dans les métriques ne le signalerait.
+> Enfin la calibration absorbe le décalage : Platt ramène le biais de 144,7 à
+> 1,13, sans rien coûter en PR-AUC. »
+
+Insister sur le mot invisible : le modèle fonctionne, les métriques sont
+bonnes, seul le niveau absolu des probabilités est faux.
+
+### Diapo 14 · Comment comparer deux modèles
+
+**À dire** (2 min) :
+
+> « Un écart de PR-AUC entre deux modèles n'est pas un résultat tant qu'on
+> ignore le bruit qui l'entoure. J'ai donc mis en place un bootstrap apparié.
+>
+> Apparié veut dire que les deux modèles sont évalués sur exactement les
+> mêmes lignes, rééchantillonnées ensemble, 200 fois. On mesure la
+> distribution de l'écart, et non deux distributions séparées.
+>
+> Et je rééchantillonne les communes, pas les lignes. C'est le point de
+> méthode le plus important de cette partie. Les 1 096 jours d'une même
+> commune ne sont pas indépendants, et 31 communes partagent la même maille
+> météo. Tirer ligne à ligne reviendrait à traiter 38 millions
+> d'observations comme 38 millions d'expériences indépendantes : les
+> intervalles seraient beaucoup trop étroits, et je conclurais à des
+> différences qui n'existent pas. Le terme consacré est la
+> pseudo-réplication. »
+
+**Détail technique, en réserve** : recalculer la PR-AUC 200 fois sur 38
+millions de lignes coûterait des heures, chaque appel retriant le tableau. On
+trie une fois ; une réplique n'est alors qu'un jeu de poids entiers le long
+de cet ordre figé, et la précision moyenne pondérée se calcule en une passe
+par sommes cumulées. Vérifié identique à scikit-learn à 1e-12 près.
+
+### Diapo 15 · Les modèles mis en concurrence
+
+**À dire** (1 min 30) :
+
+> « Chaque modèle teste une idée précise. Ce n'est pas une collection
+> d'essais.
+>
+> Les trois baselines mesurent ce que valent des règles sans apprentissage.
+> Le v1 demande si un gradient boosting standard suffit. Le v3 ajoute une
+> réponse au problème des communes sans historique. DART et le MLP testent
+> deux familles d'architectures alternatives. Le modèle C demande ce qui
+> reste quand on retire tout historique de feu. Et le LSTM demande si la
+> séquence météo porte un signal en propre.
+>
+> Le modèle C joue un double rôle : c'est celui qui satisfait la contrainte
+> de déploiement, et c'est aussi la seule référence honnête face au LSTM,
+> puisqu'aucun des deux ne voit l'historique des feux. »
+
+---
+
+## 04 · Résultats (diapos 16 à 29)
+
+### Diapo 16 · Section
+
+Transition. Annoncer que tout ce qui suit est mesuré, et que les
+interprétations viendront après.
+
+### Diapo 17 · La barre à battre
+
+**À dire** (1 min 30) :
+
+> « Sans référence, un lift de 63 ne veut rien dire. J'ai donc construit trois
+> prédicteurs sans aucun apprentissage.
+>
+> L'historique spatial seul, c'est-à-dire ce qui a brûlé rebrûlera, vaut déjà
+> 19 fois le hasard. Le danger EFFIS seul vaut 5 fois. Leur croisement vaut
+> 42 fois.
+>
+> C'est la barre à battre, et non le hasard. Un modèle à 30 fois paraîtrait
+> excellent, et serait pourtant moins bon qu'une règle de trois. »
+
+**Ce que cela répond** : la première moitié de H1. La météo seule plafonne à
+5, le croisement avec le territoire monte à 42.
+
+### Diapo 18 · Donner un risque aux communes sans historique
+
+**À dire** (1 min 30, à accélérer si le temps manque) :
+
+> « Le v1 tirait 54,6 % de son importance de l'historique de la commune. Il
+> disait surtout que ce qui a brûlé rebrûlera, ce qui est vrai mais peu
+> utile : une commune qui n'a jamais brûlé gardait un score bas, même
+> entourée de communes qui brûlent chaque été.
+>
+> La réponse est un lissage bayésien. Je regroupe les communes qui se
+> ressemblent physiquement, en 30 groupes formés sans jamais regarder le feu,
+> puis je fais retomber chaque commune vers le taux de son groupe, à
+> proportion de ce qu'on sait d'elle.
+>
+> Le gain est de 0,83 % de PR-AUC. Réel mais modeste, et le dire fait partie
+> du résultat. »
+
+**Point de méthode** : les groupes sont formés sans regarder la cible, la
+sinistralité n'entre qu'ensuite. C'est ce qui empêche cette étape d'être une
+fuite. C'est le problème classique d'estimation sur petits domaines.
+
+### Diapo 19 · Les modèles, sur la même validation
+
+**À dire** (1 min) :
+
+> « Voici les cinq modèles retenus pour la comparaison, sur la même
+> validation : 38 millions de communes-jours, 9 176 feux.
+>
+> Je ne vais pas commenter ce classement maintenant, parce que le commenter
+> sans intervalle de confiance serait précisément l'erreur que je veux
+> éviter. C'est l'objet de la diapositive suivante. »
+
+Résister à la tentation de commenter. La retenue ici prépare la diapo 20.
+
+### Diapo 20 · Ces écarts survivent-ils au bruit ?
+
+C'est la diapositive centrale de la soutenance.
 
 **À dire** (2 min 30) :
 
-> « J'ai fait un **bootstrap apparié** : 200 répliques, en rééchantillonnant
-> les 34 734 **communes** — pas les lignes. C'est important : les 1 096 jours
-> d'une même commune ne sont pas indépendants, et 31 communes partagent en
-> moyenne la même maille météo. Un bootstrap ligne à ligne donnerait des
-> intervalles faussement étroits, et me ferait conclure à tort.
+> « J'applique le bootstrap apparié décrit tout à l'heure : 200 répliques, en
+> rééchantillonnant les 34 734 communes.
 >
-> Résultat : **DART et le MLP paraissaient 1,8 % et 1,9 % moins bons que
-> XGBoost. Leurs intervalles traversent zéro. Les trois modèles sont
-> indiscernables.**
+> DART et le MLP paraissaient 1,8 % et 1,9 % moins bons que XGBoost v3. Leurs
+> intervalles traversent zéro. Les trois modèles sont indiscernables.
 >
 > Autrement dit, si j'avais présenté « XGBoost bat le MLP », j'aurais énoncé
-> une conclusion **inventée à partir du bruit**. C'est le résultat dont je
-> suis le plus content, et c'est un résultat négatif.
+> une conclusion tirée du bruit. Le résultat le plus instructif de cette
+> partie est négatif.
 >
-> Seuls deux écarts survivent : celui du modèle physique, et celui du LSTM. »
+> Deux écarts seulement survivent : celui du modèle physique et celui du
+> LSTM. Ce sont les deux dont je vais parler. »
 
-> 💡 Si vous n'avez que cinq minutes pour convaincre, montrez cette
-> diapositive-là.
+**Ce que cette diapositive démontre vraiment** : que le protocole sait dire
+« je ne sais pas ». Un protocole qui conclut toujours quelque chose ne
+conclut rien. C'est la formulation à employer si on vous demande pourquoi
+vous y tenez.
 
-**Détail technique, si on demande** : le bootstrap est rendu praticable par
-une astuce. Recalculer la PR-AUC 200 fois sur 38 millions de lignes coûterait
-des heures, chaque appel retriant le tableau. On trie **une fois** ; une
-réplique n'est alors qu'un jeu de **poids entiers** le long de cet ordre figé,
-et l'average precision pondérée se calcule en O(n) par somme cumulée. Vérifié
-identique à scikit-learn à 1e-12 près, ex æquo et poids compris.
+### Diapo 21 · H3, la séquence météo
 
-### Diapos 15 et 16 — Le LSTM ⭐
+**À dire** (2 min) :
 
-**À dire** (3 min) :
-
-> « "Pour le temps, prends un LSTM" est le réflexe standard, et on me l'a dit
-> plusieurs fois. Je l'ai donc construit, optimisé, et mesuré.
+> « Face à une série temporelle, le réflexe est de prendre un LSTM. Je l'ai
+> construit, optimisé et mesuré.
 >
-> **Il perd de 23,6 %**, intervalle de −33,5 à −17,3, loin de zéro.
+> 25 essais Optuna, arrêt précoce à l'époque 21. L'objection « il n'a pas été
+> réglé » ne tient pas.
 >
-> Première objection possible : il n'a pas été assez réglé. Elle ne tient
-> pas : **25 essais Optuna** sur sept hyperparamètres, avec arrêt précoce. Les
-> valeurs retenues sont à l'écran.
+> Résultat : 23,6 % en dessous du modèle C, avec un intervalle de −33,5 à
+> −17,3, loin de zéro.
 >
-> Deuxième point, plus subtil : **la comparaison loyale n'est pas celle qu'on
-> croit**. XGBoost v3 voit l'historique des feux — 29 % de ses importances. Le
-> LSTM n'en voit rien. Les opposer mesurerait le prix de l'information
+> Un mot sur la comparaison, parce qu'elle n'est pas celle qu'on croit.
+> XGBoost v3 voit l'historique des feux, qui pèse 29 % de ses importances ;
+> le LSTM n'en voit rien. Les opposer mesurerait le prix de l'information
 > retirée, pas la valeur de la séquence. La seule référence à jeu
-> d'information égal est le modèle physique. Et là encore, le LSTM perd — alors
-> qu'il voit **30 jours × 8 indices, soit 240 valeurs**, contre onze features
-> météo pour le modèle physique. Vingt fois plus d'historique.
->
-> *(passer à la diapo 16)*
->
-> Pourquoi ? L'explication est **physique, pas informatique**.
+> d'information égal est le modèle C. »
+
+**Le chiffre qui frappe** : le LSTM voit 30 jours × 8 indices, soit 240
+valeurs. Le modèle C voit les 8 indices du jour plus deux décalages. Vingt
+fois plus d'historique météo, et il perd.
+
+**Honnêteté à afficher spontanément** : le premier verdict que j'avais obtenu
+annonçait −97 %. Il était faux, pour une raison décrite à la diapo 34.
+
+### Diapo 22 · Pourquoi il perd
+
+**À dire** (2 min) :
+
+> « L'explication est physique, et c'est ce qui rend le résultat intéressant.
 >
 > Un LSTM sert quand l'ordre de la séquence porte une information qu'aucun
-> résumé ne capture. Ici, ce résumé existe déjà. Les indices DC, DMC et BUI du
-> système canadien **sont** des états récursifs : le *Drought Code* est
-> littéralement une moyenne exponentielle de la météo passée, avec une
-> constante de temps de 52 jours. Le *Duff Moisture Code*, de 15 jours. C'est
-> exactement la forme d'une cellule récurrente — sauf que ses coefficients ont
-> été calibrés par cinquante ans de science du feu, plutôt qu'estimés sur
-> 9 176 exemples positifs.
+> résumé ne capture. Ici, ce résumé existe déjà. Les indices DC, DMC et BUI
+> du système canadien sont des états récursifs : le Drought Code est une
+> moyenne exponentielle de la météo passée, de constante de temps 52 jours,
+> le Duff Moisture Code 15 jours. C'est la forme d'une cellule récurrente, à
+> ceci près que ses coefficients ont été calibrés par cinquante ans de
+> science du feu plutôt qu'estimés sur 9 176 exemples positifs.
 >
-> **Le CEMS livre déjà l'état caché que le LSTM devrait réapprendre.**
+> Le CEMS livre déjà l'état caché que le LSTM devrait réapprendre.
 >
-> Trois observations indépendantes le confirment : la PACF montre une
-> autocorrélation épuisée en deux à trois jours ; un ARIMA sans variable
-> exogène est inutilisable, avec une corrélation **négative** de −0,118 ; et
-> les trois premières features du modèle physique décrivent le combustible,
-> pas le passé.
->
-> Ce problème n'est pas une prévision de série temporelle. C'est une
-> **classification spatio-temporelle d'événement rare**, sur 34 734 séries
-> parallèles pilotées par un exogène déjà résumé par la physique du domaine. »
+> Trois observations indépendantes convergent. La PACF des résidus tombe de
+> 0,70 au premier retard à 0,08 au troisième : la mémoire utile de la série
+> est de deux à trois jours. Un ARIMA sans variable exogène est inutilisable,
+> avec une corrélation négative. Et les trois premières variables du modèle C
+> sont la part de maquis, le danger EFFIS et l'ERC : le signal dit surtout où
+> se trouve le combustible. »
 
-> ⚠️ **Réserve à donner spontanément** : « Une asymétrie subsiste — le LSTM ne
-> reçoit pas `danger_effis`, qui pèse 13,7 % dans le modèle physique. Les
-> 23,6 % sont donc un **majorant**. C'est la première chose que je referais. »
-> Dire cela avant qu'on vous le demande vaut beaucoup.
+**La nuance à donner sans attendre la question** : les retards 4 à 8 de la
+PACF restent statistiquement significatifs. Avec 7 305 jours, le seuil
+descend à 0,023 et presque tout le devient. Mais le retard 8, à 0,034, rend
+compte de 0,11 % de la variance. Significatif ne veut pas dire utile, et
+c'est une distinction qu'un jury attend.
 
-### Diapo 17 — v3 contre C ⭐
+**Réserve à donner spontanément** : le LSTM ne reçoit pas `danger_effis`, qui
+pèse 13,7 % dans le modèle C. L'écart de 23,6 % est donc un majorant. C'est
+la première chose que je reprendrais.
 
-**À dire** (2 min) :
+### Diapo 23 · Ce que le passé de la série prédit
 
-> « Voici la décision la plus contre-intuitive du projet.
+**À dire** (1 min 30) :
+
+> « J'ai fait un détour par les méthodes classiques, qui sert de
+> contre-épreuve.
 >
-> Sur le test, XGBoost v3 fait **×93,8**. Le modèle physique, **×63,7**. v3
-> est nettement meilleur. Et pourtant c'est le modèle physique qui tourne dans
-> l'application.
+> Le test de Dickey-Fuller augmenté d'abord. Une précision, parce que le sens
+> du test est contre-intuitif : l'hypothèse nulle est que la série a une
+> racine unitaire, donc qu'elle n'est pas stationnaire. Rejeter H₀ signifie
+> stationnaire.
 >
-> Trois raisons, dont **aucune n'est visible dans une métrique
-> d'entraînement**.
+> Ensuite SARIMAX. La saisonnalité annuelle passe par des termes de Fourier
+> en variable exogène, plutôt que par une composante SARIMA d'ordre 365 qui
+> serait instable et très lente.
 >
-> Un : la donnée n'existe pas en temps réel. v3 tire 29 % de son importance de
-> l'historique des feux, or la BDIFF ne publie pas l'année en cours — les feux
-> de 2026 sortiront au printemps 2027. Pour une prédiction faite aujourd'hui,
-> `feux_commune_7j` vaudrait le décompte d'une semaine de décembre 2025. Pas
-> imprécis : **faux**.
+> La ligne qui compte est la dernière. Un ARIMA sans variable exogène donne
+> une corrélation négative : à 1 096 pas d'horizon, un modèle autorégressif
+> dont la mémoire utile vaut trois jours a oublié son point de départ et
+> converge vers la moyenne. Ajouter le FWI fait tomber l'erreur de 37 %. La
+> prévisibilité du feu est dans la météo, pas dans son propre passé. »
+
+**Pourquoi ce détour n'est pas décoratif** : il montre que la conclusion sur
+le LSTM ne repose pas sur une seule expérience, mais sur trois familles de
+méthodes qui disent la même chose.
+
+### Diapo 24 · Le meilleur modèle n'est pas celui qu'on déploie
+
+**À dire** (2 min 30) :
+
+> « C'est la décision la plus contre-intuitive du projet.
 >
-> Deux : en territoire inconnu, cette variable vaut zéro partout. Et le modèle
-> lit ce zéro comme "ça n'a jamais brûlé, donc ça ne brûlera pas" —
-> précisément là où le risque nouveau apparaît.
+> Sur le test, XGBoost v3 fait 93,8 fois le hasard, le modèle C 63,7. J'ai
+> déployé le second.
 >
-> Trois : pour 2050, elle est impossible par construction. On ne connaîtra
+> Trois raisons. D'abord, la donnée n'existe pas en temps réel : v3 tire 29 %
+> de son importance de l'historique des feux, et la BDIFF ne publie pas
+> l'année en cours. Les feux de 2026 sortiront au printemps 2027. Si je
+> lançais le modèle ce matin, la variable feux de la commune sur 7 jours
+> vaudrait le décompte d'une semaine de décembre 2025. Ce n'est pas
+> imprécis, c'est faux.
+>
+> Ensuite, en territoire inconnu cette variable vaut zéro, et le modèle lit
+> ce zéro comme « ça n'a jamais brûlé, donc ça ne brûlera pas », précisément
+> là où un risque nouveau apparaît.
+>
+> Enfin, pour 2050 elle est impossible par construction : on ne connaîtra
 > jamais les feux de 2049.
 >
-> **Le choix se fait sur la disponibilité de la donnée, pas sur la
-> performance.** Et c'est ce qui autorise à mesurer les deux modèles sur le
-> test sans corrompre le protocole : ils répondent à deux situations
-> différentes, pas à la même question. »
+> Le choix se fait donc sur la disponibilité de la donnée, pas sur la
+> performance. Et ce défaut n'apparaît dans aucune métrique d'entraînement :
+> en validation comme en test, l'historique est toujours là. »
 
-### Diapo 18 — La validation croisée spatiale
+**Si on objecte qu'il est dommage de perdre 30 points de lift** : enchaîner
+sur la diapo 28, qui montre que cet écart ne vaut que 3 points de rappel à
+1 % de budget de surveillance, et rien du tout à 10 %.
 
-**À dire** (1 min 30) :
-
-> « Ce n'est pas qu'un raisonnement, je l'ai mesuré. Protocole : je retire une
-> région entière de l'entraînement, j'entraîne, et je teste **sur la région
-> exclue**. Neuf fois, une par région. C'est la simulation d'un territoire
-> jamais vu.
->
-> Le modèle physique gagne dans les **neuf régions sur neuf**, sans exception.
-> +8,2 % en moyenne pondérée, et jusqu'à **+137 % dans le Grand Est** — c'est-
-> à-dire là où l'historique est le plus pauvre.
->
-> Là où le passé manque, s'y fier est un **handicap**. C'est l'argument
-> décisif pour 2050 : le climat va déplacer le risque vers des communes qui
-> n'ont pas de passé. »
-
-### Diapo 19 ⏩ — La calibration
-
-**À dire** (1 min) :
-
-> « Le score brut est **145 fois trop grand** : c'est le sous-échantillonnage
-> qui remonte à la surface.
->
-> Platt le corrige à ×1,13 sans rien coûter en PR-AUC — le classement est
-> intact, seule l'échelle bouge. L'isotonique calibre aussi bien mais écrase
-> le score sur 136 valeurs distinctes au lieu de 9 millions : on perd du
-> pouvoir de discrimination pour rien.
->
-> Dans l'application, j'affiche finalement un **rang**, pas une probabilité :
-> le calibrateur disponible a été ajusté sur un autre modèle et une autre
-> période, il serait faux d'un facteur 2. J'ai préféré ne pas afficher une
-> probabilité plutôt que d'en afficher une fausse. »
-
-### Diapo 20 — L'évaluation test
+### Diapo 25 · H2, retirer une région entière
 
 **À dire** (1 min 30) :
 
-> « J'ai ouvert le test une seule fois, après gel complet.
+> « Pour vérifier que ce raisonnement tient, j'ai fait une validation croisée
+> spatiale : je retire une région entière du train, j'entraîne, et je teste
+> sur la région exclue. Neuf fois, une par région.
 >
-> Le lift varie du simple au double d'une année à l'autre — et ce n'est pas du
-> bruit, **il suit la rareté**. 2024 est l'année la plus calme, avec 1 297
-> feux, et donne le **meilleur** lift : ×151. 2023, la plus active, le plus
-> faible : ×76.
+> Le modèle physique gagne les neuf fois, sans exception : plus 8,2 % en
+> moyenne pondérée, et jusqu'à plus 137 % dans le Grand Est.
 >
-> C'est contre-intuitif et instructif : **une année calme concentre les feux
-> dans les endroits les plus prévisibles**. Quand tout brûle, y compris là où
-> ce n'est pas censé arriver, le modèle est pris en défaut. »
+> Là où l'historique est le plus pauvre, s'y fier devient un handicap. C'est
+> l'argument décisif pour les projections, puisque le climat déplacera le
+> risque vers des communes qui n'ont pas de passé. »
 
-> 💡 Ce point montre que vous avez regardé la variabilité, pas seulement la
-> moyenne. Les jurys y sont sensibles.
+C'est la réponse la plus directe à H2 : le territoire porte une information
+qui se transfère, l'historique non.
 
----
+### Diapo 26 · La calibration
 
-## 4 · Comprendre le modèle (diapos 21 à 23)
+**À dire** (1 min 30, à accélérer si nécessaire) :
 
-### Diapo 21 — Section
+> « Le score brut est 145 fois trop grand, conséquence directe du
+> sous-échantillonnage.
+>
+> Platt corrige sans rien coûter : le classement reste intact, seule
+> l'échelle bouge. L'isotonique calibre aussi bien mais écrase le score, avec
+> 136 valeurs distinctes au lieu de 9 millions ; on perd du pouvoir de
+> discrimination sans rien gagner.
+>
+> Une précision sur l'application : elle affiche un rang, pas une
+> probabilité. Le calibrateur dont je dispose a été ajusté sur un autre
+> modèle et une autre période, il serait faux d'un facteur voisin de 2. J'ai
+> préféré ne pas afficher de probabilité plutôt que d'en afficher une
+> fausse. »
 
-### Diapo 22 — SHAP ⭐
+C'est un choix documenté, pas un oubli. Le formuler ainsi.
+
+### Diapo 27 · L'évaluation finale
+
+**À dire** (1 min 30) :
+
+> « Le test a été ouvert une seule fois, après gel complet.
+>
+> Le lift moyen est de 63,7, mais il varie du simple au double selon l'année,
+> et cette variation n'est pas du bruit : elle suit la rareté. 2024 est
+> l'année la plus calme, avec 1 297 feux, et donne le meilleur lift, 151.
+> 2023, la plus active, donne le plus faible, 76.
+>
+> L'explication est qu'une année calme concentre les feux dans les endroits
+> les plus prévisibles. Quand tout brûle, y compris là où ce n'est pas
+> attendu, le modèle est pris en défaut. »
+
+Ce que cette diapositive montre méthodologiquement : on a regardé la
+variabilité, et pas seulement la moyenne.
+
+### Diapo 28 · Ce que le modèle change concrètement
+
+**À dire** (1 min 30) :
+
+> « Un lift ne se traduit pas directement en décision. La question utile est :
+> si on peut surveiller 1 % du territoire, combien de départs couvre-t-on ?
+>
+> La réponse est 42 %. En surveillant 1 % des communes-jours, on couvre 42 %
+> des départs.
+>
+> Et il y a une lecture moins flatteuse, que je préfère donner moi-même : les
+> 37 % de PR-AUC qui séparent v3 du modèle C ne valent que 3 points de rappel
+> à 1 % de budget, et plus rien du tout à 10 %. Une grande partie de l'écart
+> que je mesure est opérationnellement invisible. »
+
+C'est la diapositive qui relie les métriques à une décision, et qui achève de
+justifier le choix de la diapo 24.
+
+### Diapo 29 · H4, le danger monte, les feux non
 
 **À dire** (2 min) :
 
-> « "Qu'est-ce qui fait partir un feu ?" La question paraît simple. Elle a
-> **trois réponses différentes**, et chacune est juste — mais pas à la même
-> question.
+> « Quatre séries, sur deux fenêtres d'observation différentes.
 >
-> À gauche, l'**importance par gain** : combien chaque variable a réduit la
-> perte pendant l'entraînement. C'est ce que renvoie XGBoost par défaut.
+> Le FWI moyen annuel augmente de 58 % sur 53 ans. Le FWI estival de 62 %. Le
+> nombre de jours de danger élevé de 197 %. Ces trois tendances sont très
+> significatives.
 >
-> Au milieu, **SHAP sur un échantillon aléatoire** : combien elle déplace le
-> score sur le territoire tel qu'il est — 99,97 % de communes-jours sans feu.
+> Le nombre de communes-jours en feu, lui, ne montre aucune tendance
+> significative sur les 20 années dont je dispose.
 >
-> À droite, **SHAP sur le sommet du classement** : combien elle déplace le
-> score là où le modèle s'engage.
->
-> Deux désaccords méritent d'être expliqués.
->
-> `danger_effis` est **2ᵉ par gain et 30ᵉ par SHAP**. Ce n'est pas une erreur :
-> c'est une discrétisation du FWI en six classes. XGBoost adore ces seuils
-> nets pour découper, d'où un gain élevé — mais l'information est déjà dans le
-> FWI continu, et SHAP lui en attribue le crédit. **L'importance par gain ne
-> sait pas gérer la redondance.**
->
-> `part_maquis` est **1ᵉʳ par gain, 10ᵉ sur l'échantillon aléatoire, 2ᵉ au
-> sommet**. Là encore tout est cohérent : le maquis ne change rien sur une
-> commune-jour moyenne — il n'y en a pas — mais il devient déterminant là où
-> le modèle voit du risque.
->
-> La morale : **ne jamais citer "la feature numéro un" sans dire de quelle
-> mesure il s'agit et sur quelle population.** »
+> La formulation exacte est donc : les conditions favorables aux feux
+> augmentent très significativement, et le nombre de départs reste stable. Je
+> ne dirai pas que les feux augmentent, parce que mes données ne le montrent
+> pas. »
 
-**Si on demande pourquoi SHAP plutôt qu'autre chose** : sur un modèle à base
-d'arbres, TreeSHAP est **exact** — ce n'est pas une approximation par
-échantillonnage comme KernelSHAP. Je l'ai vérifié : la somme des contributions
-plus la valeur de base redonne le logit du score à 1e-6 près.
+**Les trois lectures possibles, à donner dans cet ordre** :
 
-⚠️ **Piège méthodologique à mentionner** : sélectionner sur le score introduit
-un **biais de collision**. J'en ai fait les frais — une première analyse
-d'interaction, menée sur le seul échantillon du sommet, donnait un signe
-**opposé** à la réalité. C'est pourquoi les deux panneaux SHAP sont affichés
-côte à côte, et jamais l'un sans l'autre.
+1. La puissance statistique est faible : 20 points d'observation seulement,
+   contre 53 pour les séries météo.
+2. La prévention absorbe pour l'instant la hausse de l'aléa, ce qui est
+   cohérent avec les politiques de débroussaillement et de surveillance.
+3. On mesure l'aléa, pas le bilan : un aléa plus élevé peut se traduire par
+   des feux plus grands plutôt que plus nombreux.
 
-### Diapo 23 — DiCE
+Ne pas trancher. Dire qu'on ne peut pas trancher avec ces données est la
+réponse juste.
 
-**À dire** (1 min 30) :
+---
 
-> « SHAP et LIME répondent à *pourquoi ce score*. DiCE répond à *qu'aurait-il
-> fallu changer* — et c'est la seule question dont la réponse soit
-> actionnable.
+## 05 · Interprétation (diapos 30 à 37)
+
+### Diapo 30 · Section
+
+Transition. Annoncer qu'on passe de ce qui est mesuré à ce que cela veut
+dire.
+
+### Diapo 31 · Qu'est-ce qui fait partir un feu ?
+
+**À dire** (2 min 30) :
+
+> « Trois façons de poser la question, trois réponses, chacune juste mais pas
+> à la même question.
+>
+> L'importance par gain mesure combien chaque variable a réduit la perte
+> pendant l'entraînement. SHAP sur un échantillon aléatoire mesure combien
+> elle déplace le score sur le territoire tel qu'il est, c'est-à-dire à
+> 99,97 % des communes-jours sans feu. SHAP au sommet du classement mesure
+> combien elle le déplace là où le modèle s'engage.
+>
+> Deux désaccords valent d'être expliqués. Le danger EFFIS est deuxième par
+> gain et trentième par SHAP : c'est une discrétisation du FWI en six
+> classes, XGBoost trouve ces seuils commodes pour découper, mais
+> l'information est déjà dans le FWI continu et SHAP lui en attribue le
+> crédit. L'importance par gain ne sait pas traiter la redondance.
+>
+> La part de maquis est première par gain, dixième sur l'échantillon
+> aléatoire et deuxième au sommet : elle ne change rien sur une commune-jour
+> moyenne, où il n'y a pas de maquis, et devient déterminante là où le modèle
+> voit du risque.
+>
+> Conséquence pratique : citer la variable la plus importante n'a pas de sens
+> sans préciser quelle mesure et sur quelle population. »
+
+**Ce que cela répond** : H1 et H2 réunies. Les variables de territoire
+occupent le haut du classement à égalité avec la météo. La météo situe le
+moment, le territoire situe le lieu.
+
+**Si on demande quelle garantie** : TreeSHAP est exact sur un modèle
+d'arbres, ce n'est pas une approximation par échantillonnage. Vérifié dans le
+projet, la somme des contributions plus la valeur de base redonne le logit du
+score à 9,5e-07 près.
+
+**Attention au biais de collision** : sélectionner sur le score conditionne
+le résultat, et j'ai vu le signe d'une interaction s'inverser à cause de
+cela. Le panneau « sommet » ne se lit que pour la question « quand ça
+brûle ».
+
+### Diapo 32 · La seule question actionnable
+
+**À dire** (2 min) :
+
+> « SHAP et LIME répondent à pourquoi ce score. DiCE répond à qu'aurait-il
+> fallu changer, et c'est la seule des trois dont la réponse se traduise en
+> décision.
 >
 > Un exemple mesuré : Bormes-les-Mimosas, 99,9ᵉ percentile du 12 août 2024.
-> J'autorise à modifier la végétation seule — maquis, forêt, part combustible,
-> part agricole. **Résultat : aucun contrefactuel.** Rien, sur ces leviers, ne
-> fait sortir la commune du décile à risque. Son exposition tient à sa
-> position, à son relief, à sa superficie. Le risque est **structurel** — et
-> c'est un résultat, pas un échec.
+> J'autorise à modifier la végétation seule, maquis, forêt, part combustible,
+> part agricole.
 >
-> Un détail d'implémentation a tout changé. DiCE cherche par défaut à faire
-> passer la probabilité sous 0,5. Or le score n'est pas calibré : 0,5
-> correspond à un risque astronomique, et l'outil ne renvoyait jamais rien.
-> J'ai recentré la frontière sur le **décile**, par une transformation
-> strictement croissante qui laisse le classement intact. La question devient
-> "que faudrait-il pour sortir des 10 % les plus à risque" — celle qui a un
-> sens opérationnel.
->
-> Enfin, **un contrefactuel n'est pas une recommandation**. Rien ne garantit
-> qu'il soit réalisable — on ne convertit pas 40 % de maquis en terres
-> agricoles — ni que le lien soit causal : le modèle a appris des
-> corrélations, pas des mécanismes. »
+> Résultat : aucun contrefactuel. Rien, sur ces leviers, ne fait sortir la
+> commune du décile à risque. Son exposition tient à sa position, à son
+> relief, à sa superficie. Le risque est structurel, et l'absence de solution
+> est ici la réponse. »
 
-**Si on demande pourquoi LIME** : sur un modèle d'arbres, LIME approxime par
-une régression linéaire locale ce que TreeSHAP calcule exactement. Je le montre
-pour la comparaison, et parce que savoir **pourquoi on ne s'en sert pas** vaut
-mieux que l'ignorer. Sur un modèle qu'on ne peut pas ouvrir — une API, un
-réseau profond — LIME redeviendrait le bon outil.
+**Le détail d'implémentation qui change tout** : DiCE cherche par défaut à
+faire passer la probabilité sous 0,5. Or le score n'est pas calibré, 0,5
+correspond à un risque astronomique, et l'outil ne renvoyait jamais rien.
+J'ai recentré la frontière sur le décile par une transformation strictement
+croissante, qui laisse le classement intact. La question devient « que
+faudrait-il pour sortir des 10 % les plus à risque », celle qui a un sens
+opérationnel.
 
----
+**La mise en garde à donner** : un contrefactuel n'est pas une
+recommandation. Rien ne garantit qu'il soit réalisable, on ne convertit pas
+40 % de maquis en terres agricoles, ni que le lien soit causal, le modèle
+ayant appris des corrélations et non des mécanismes.
 
-## 5 · Le climat (diapos 24 à 26)
+**Sur LIME, si la question vient** : sur un modèle d'arbres il approxime ce
+que TreeSHAP calcule exactement, donc il ne peut pas faire mieux. Il figure
+dans l'application parce qu'il est très répandu et qu'il vaut mieux savoir
+pourquoi on ne l'a pas retenu. Sur un modèle qu'on ne peut pas ouvrir, une
+API ou un réseau profond, il redeviendrait le bon outil.
 
-### Diapo 24 — Section
-
-### Diapo 25 — La tendance ⭐
-
-**C'est la diapositive où l'honnêteté compte le plus.**
+### Diapo 33 · Projeter jusqu'en 2100
 
 **À dire** (2 min) :
 
-> « Le danger météo monte de façon incontestable. Sur 53 ans de mesures, le
-> FWI moyen annuel gagne **+58 %**, avec un p de 4×10⁻⁵. La moyenne
-> juin-septembre, **+62 %** — c'est l'été qui se réchauffe et s'assèche le
-> plus. Les jours de danger élevé, **+197 %**.
+> « Trois scénarios GIEC, appliqués à l'aléa météo. Je veux être précis sur
+> ce que cela veut dire et sur ce que cela ne veut pas dire.
 >
-> **Et pourtant le nombre de feux ne monte pas** : +3 % sur 19 ans, avec un p
-> de 0,89. Rigoureusement rien.
+> Ce que je projette, c'est le FWI, seule quantité qui montre un signal et
+> seule que les modèles climatiques savent fournir.
 >
-> Il serait malhonnête de ne montrer que le premier graphique. Trois lectures
-> cohabitent.
+> Ce que je ne projette pas, c'est le nombre de feux. La végétation, la
+> prévention et les pratiques agricoles sont supposées constantes, ce qui est
+> une hypothèse, et elle est fausse.
 >
-> Un : **la puissance statistique**. Les feux ne sont observés que depuis
-> 2006 — dix-neuf points annuels très bruités ne peuvent pas détecter une
-> tendance modérée. L'absence de preuve n'est pas une preuve d'absence.
+> Quand l'application affiche le 2 août 2050, cela ne désigne pas une
+> prévision météo pour ce jour-là, mais un 2 août ordinaire sous le climat de
+> 2050. La forme de la saison vient des observations, seul son niveau est
+> décalé.
 >
-> Deux : **la prévention fonctionne**. Le nombre de départs dépend autant des
-> moyens de lutte et du débroussaillement que du climat. Un aléa qui monte à
-> sinistralité constante est le résultat **attendu** d'une politique efficace.
+> Dernier point, que je préfère donner moi-même : avant 2045, les trois
+> scénarios sont indiscernables. En 2030, le RCP 2.6 dépasse le RCP 8.5 sur
+> 59 % des communes. Ce n'est pas une anomalie de mon code, c'est l'inertie
+> du système climatique : les trajectoires d'émissions ne divergent
+> réellement qu'après le milieu du siècle. »
+
+L'application affiche cet avertissement à chaque date postérieure à 2025 et
+grise la zone antérieure à 2045 sur les graphiques de projection.
+
+### Diapo 34 · Les erreurs commises
+
+**À dire** (2 min 30) :
+
+> « Sur un événement à 0,02 %, une erreur ne se manifeste jamais par une
+> exception. Elle se manifeste par un chiffre plausible. Voici les
+> principales.
 >
-> Trois : **ce que je projette, c'est l'aléa, pas le bilan.**
+> Mon premier verdict sur le LSTM annonçait moins 97 %. Le vrai est moins 52.
+> L'écart ne venait pas du modèle, mais de la façon de comparer deux
+> fichiers. La requête d'assemblage n'a pas d'ORDER BY : l'ordre des 38
+> millions de lignes que renvoie PostgreSQL dépend du plan d'exécution et
+> change d'une exécution à l'autre. Mes fichiers ne portaient que le score et
+> la cible : même taille, même nombre de feux, ordre différent, et aucune
+> erreur levée.
 >
-> Donc la phrase juste est : *les conditions favorables aux feux augmentent
-> très significativement, et le nombre de départs reste stable, ce qui est
-> cohérent avec une prévention qui absorbe pour l'instant la hausse de
-> l'aléa.* »
+> La parade est simple : tout fichier porte désormais ses clés, une fonction
+> d'alignement vérifie, et un test refuse un fichier sans clés. »
 
-> ⚠️ **Cette diapositive contient une leçon de méthode** : j'ai d'abord
-> affiché +45 % dans l'application, chiffre écrit en dur dans une chaîne de
-> caractères. Il était faux. Depuis, toutes les tendances sont **calculées et
-> exportées** ; l'application les lit. Si on vous demande d'où vient +58 %,
-> répondez : « d'une régression linéaire sur les moyennes annuelles de
-> 21,9 millions de lignes, recalculée à chaque export ».
+Puis parcourir rapidement le tableau des autres erreurs.
 
-### Diapo 26 — Les projections
+**La démonstration, si le temps le permet** : le bug est reproduit
+volontairement dans le notebook et dans l'application. On permute les lignes,
+la PR-AUC tombe de 0,0085 à 0,0002, exactement la ligne du hasard, avec
+strictement les mêmes valeurs dans le fichier.
 
-**À dire** (1 min 30) :
+**La formulation à employer** : les seules défenses sont les invariants
+explicites et les assertions qui échouent bruyamment. 50 tests tournent en
+intégration continue à chaque commit.
 
-> « Trois scénarios du GIEC — RCP 2.6, 4.5 et 8.5 — appliqués à l'aléa météo.
->
-> Ce que je projette : le **FWI**, seule quantité qui montre un signal et que
-> les modèles climatiques savent fournir.
->
-> Ce que je ne projette pas : le nombre de feux. La végétation, la prévention
-> et les pratiques agricoles sont supposées constantes. C'est une hypothèse,
-> et elle est fausse — mais elle est explicite.
->
-> Et il faut être précis sur ce que "le 2 août 2050" veut dire. Ce n'est
-> **pas** une prévision météo : personne ne connaît le temps qu'il fera ce
-> jour-là. C'est un 2 août **ordinaire** sous le climat de 2050. La forme de
-> la saison vient des observations 2006-2019 ; seul son niveau est décalé par
-> le réchauffement projeté. L'application affiche cet avertissement à chaque
-> date postérieure à 2025. »
-
----
-
-## 6 · Rigueur (diapos 27 à 31)
-
-### Diapo 27 — Section
-
-> « Je voudrais terminer par les erreurs que j'ai commises. »
-
-### Diapo 28 — Le bug d'alignement ⭐
+### Diapo 35 · Ce que le projet ne fait pas
 
 **À dire** (2 min) :
 
-> « Le premier verdict que j'avais pour le LSTM annonçait **−97 %**. Le vrai
-> est −52 %. L'écart ne venait pas du modèle, mais de la façon dont je
-> comparais deux fichiers.
+> « Les limites que je connais valent mieux que celles qu'on me
+> découvrirait.
 >
-> La requête qui assemble la matrice n'a pas d'`ORDER BY`. L'ordre dans lequel
-> PostgreSQL renvoie les 38 millions de lignes dépend du plan d'exécution et
-> des workers parallèles — il **change d'une exécution à l'autre**. Mes
-> fichiers de prédictions ne portaient que le score et la cible : les comparer
-> revenait à les aligner **par position**.
+> La surface brûlée n'est pas prédictible : R² de 0,14, moins bon que
+> d'annoncer toujours la médiane. Elle dépend de ce qui se passe après le
+> départ, vent, délai d'intervention, relief.
 >
-> Deux fichiers issus de deux exécutions ont la même taille, le même nombre de
-> feux, et un ordre différent. **Rien ne signale l'erreur.**
+> Sera-ce un grand feu se prédit mal aussi : lift de 2,9 seulement, contre
+> 63,7 pour les départs. On peut lire une ROC-AUC de 0,77 sur cette tâche,
+> c'est exact, mais m'en servir après avoir expliqué pourquoi la ROC-AUC
+> flatte serait me contredire.
 >
-> Je l'ai reproduit volontairement — c'est le graphique à l'écran. On permute
-> les lignes, la PR-AUC tombe de 0,0085 à 0,0002 : exactement la ligne du
-> hasard, avec les mêmes valeurs dans le fichier.
->
-> La parade : tout fichier de prédictions porte désormais ses clés, une
-> fonction d'alignement vérifie qu'elles correspondent, et un test **refuse**
-> un fichier sans clés. »
-
-> 💡 Ne présentez jamais cela comme un aveu. C'est une démonstration de
-> maturité : vous avez trouvé un bug que rien ne signalait, vous en avez
-> mesuré l'effet, et vous avez posé un garde-fou.
-
-### Diapo 29 — Les autres erreurs
-
-**À dire** (1 min 30) — *ne pas lire tout le tableau, en choisir deux* :
-
-> « Trois autres erreurs sérieuses, trouvées et corrigées.
->
-> J'avais laissé `ha` et la cible dans les features du modèle de surface
-> brûlée : R² de 0,994 et ROC-AUC de 1,0000. Un score trop beau pour être
-> vrai — c'est ce qui m'a alerté.
->
-> J'ai mené une analyse d'interaction sur le seul échantillon du sommet : le
-> signe de l'interaction s'inversait. C'est un **biais de collision** —
-> sélectionner sur le score conditionne le résultat.
->
-> Et j'avais un dentelé de période quatre ans dans les séries annuelles : le
-> 15 août tombe au jour 227 ou 228 selon les années bissextiles, et la
-> climatologie non lissée sautait de 50 % d'un jour à l'autre.
->
-> Le point commun : sur un événement à 0,02 %, **une erreur ne se manifeste
-> jamais par une exception. Elle se manifeste par un chiffre plausible.** Les
-> seules défenses sont les invariants explicites et les assertions qui
-> échouent bruyamment. Cinquante tests tournent en intégration continue à
-> chaque commit. »
-
-### Diapo 30 — L'application
-
-**Démonstration en direct** (2 à 3 min). Ordre conseillé :
-
-1. **La carte** — choisir le 12 août 2024, montrer l'arc méditerranéen.
-2. **Basculer sur une date future** — 2050, RCP 8.5 — et lire l'avertissement
-   à voix haute.
-3. **Le mode rétrospectif** — montrer qu'il compare les deux modèles, puis
-   **essayer une date de 2021** pour montrer qu'il **refuse** et explique
-   pourquoi. C'est le moment le plus fort de la démo.
-4. **La page Pourquoi** — chercher une commune, montrer la décomposition SHAP.
-
-> 💡 Le refus sur 2021 est ce qui distingue une démo d'étudiant d'une démo
-> d'ingénieur. Ne le sautez pas.
-
-### Diapo 31 — Les limites
-
-**À dire** (1 min 30) :
-
-> « Je termine par ce que le projet ne fait pas.
->
-> **La surface brûlée n'est pas prédictible** : R² de 0,14, moins bon que
-> d'annoncer toujours la médiane. Elle dépend de ce qui se passe *après* le
-> départ : vent, délai d'intervention, relief.
->
-> J'ai aussi essayé la question binaire, "sera-ce un grand feu de plus de 5
-> hectares ?" — et c'est **modeste** : un lift de 2,9 seulement, contre 63,7
-> pour les départs. On sait un peu anticiper les grands feux, beaucoup moins
-> bien que les départs.
->
-> **Une commune-jour n'est pas un incendie** : un feu traversant cinq communes
+> Une commune-jour n'est pas un incendie : un feu traversant cinq communes
 > compte cinq fois.
 >
-> **31 communes partagent une maille météo de 28 kilomètres** : elles ont le
-> même FWI le même jour. Le FWI porte le *quand*, la végétation porte le *où*.
-> Conséquence statistique, que je dois signaler : les intervalles naïfs sur
-> les coefficients météo seraient trop étroits.
+> 31 communes partagent une maille météo de 28 km, avec une conséquence
+> statistique directe : les intervalles naïfs sur les coefficients météo
+> seraient trop étroits.
 >
-> Et **le LSTM n'a pas reçu `danger_effis`**. Les 23,6 % sont un majorant tant
-> que cette asymétrie n'est pas levée. C'est la première chose que je
-> referais. »
+> Et le LSTM n'a pas reçu danger_effis. L'écart de 23,6 % reste un majorant
+> tant que cette asymétrie n'est pas levée. C'est la première chose à
+> refaire. »
+
+### Diapo 36 · L'application
+
+**À dire** (3 min, démonstration comprise) :
+
+Faire la démonstration en direct : la carte d'abord, puis le basculement
+rétrospectif sur une date d'août, puis la page *Pourquoi un feu part*.
+
+> « L'application est déployée publiquement. La carte affiche les 34 696
+> communes en aplat, de 1973 à 2100, avec trois scénarios GIEC.
+>
+> Un point que je veux souligner : le mode rétrospectif refuse d'afficher le
+> modèle v3 sur 20 des 23 années qu'il pourrait techniquement couvrir. Le
+> train, parce qu'il a appris ces lignes. La validation, parce qu'elle a
+> servi à choisir. L'avenir, parce qu'il n'y a pas d'historique. Et il sait
+> dire laquelle des trois raisons s'applique à la date demandée. »
+
+**Si la connexion échoue** : les captures des diapos 1, 20, 25 et 29 viennent
+de l'application et suffisent à montrer l'essentiel.
+
+### Diapo 37 · Réponses aux quatre hypothèses
+
+**À dire** (1 min 30) :
+
+Reprendre le tableau ligne par ligne sans le paraphraser longuement, puis
+conclure :
+
+> « La réponse à la question principale est positive, avec une réserve
+> explicite : j'estime un risque relatif, pas une probabilité absolue. C'est
+> pour cette raison que l'application affiche un rang.
+>
+> S'il ne devait rester qu'une chose : le modèle classe bien, il ne quantifie
+> pas. »
+
+Terminer sur la réserve plutôt que sur la performance.
 
 ---
 
 ## Annexe A · Fiche de chaque modèle
 
-> C'est le tableau à connaître par cœur. Un jury demande souvent : *« pour ce
-> modèle-là, quel était l'objectif, la cible, et qu'avez-vous mesuré ? »*
-
 ### Baselines (aucun apprentissage)
 
-| | |
-|---|---|
-| **Objectif** | établir la barre à battre |
-| **Cible** | `y` binaire — au moins un départ de feu ce jour-là dans cette commune |
-| **Prédicteurs** | ① hasard ② taux historique de la commune ③ classe de danger EFFIS ④ le produit des deux |
-| **Mesuré sur** | validation 2020-2022, 38 M lignes, non échantillonnée |
-| **Résultat** | ×1 · ×19,4 · ×5,1 · ×42,1 |
-| **Conclusion** | l'historique spatial est déjà un prédicteur puissant ; tout modèle doit battre ×42 |
+| Prédicteur | PR-AUC | lift |
+|---|---|---|
+| hasard | 0,000241 | ×1,0 |
+| historique de la commune | 0,004668 | ×19,4 |
+| danger EFFIS seul | 0,001220 | ×5,1 |
+| historique × EFFIS | 0,010149 | ×42,1 |
 
-### Modèle v1 — RandomForest et XGBoost, 43 features
+Aucun paramètre ajusté. Ce sont les références qui donnent son sens au reste.
 
-| | |
-|---|---|
-| **Objectif** | première mesure honnête, et diagnostic |
-| **Cible** | `y` binaire |
-| **Features** | météo du jour et décalages, végétation CORINE, territoire, calendrier, historique des feux |
-| **Entraîné sur** | train 2006-2019 sous-échantillonné 1:10 → 368 826 lignes |
-| **Mesuré** | PR-AUC, lift, courbe de fiabilité, courbe d'apprentissage |
-| **Résultat** | RandomForest **0,0150 · ×62,0** · XGBoost **0,0166 · ×68,8** |
-| **Conclusion** | XGBoost devance nettement RandomForest. Surtout : **54,6 % de l'importance vient de l'historique de la commune** — le modèle est à moitié un modèle de persistance. C'est ce diagnostic qui déclenche le v3. |
+### Modèle v1 · XGBoost, 43 variables
 
-### Modèle v2 — v1 optimisé par Optuna
+Premier modèle complet : météo du jour, occupation du sol, démographie,
+historique brut de la commune. Sert de point de départ et révèle le problème
+principal, à savoir que 54,6 % de l'importance vient de l'historique.
 
-| | |
-|---|---|
-| **Objectif** | savoir ce que le réglage rapporte, séparément des features |
-| **Mesuré** | 60 essais Optuna, échantillonnage TPE, sur la validation |
-| **Résultat** | PR-AUC **0,0175 · ×72,4** — soit **+5,2 %** sur le v1 |
-| **Conclusion** | le réglage rapporte réellement, et davantage que le clustering qui suivra |
+### Modèle v2 · v1 optimisé
 
-### Modèle v3 — clustering territorial et lissage bayésien, 52 features
+Recherche d'hyperparamètres par Optuna, échantillonnage TPE, 60 essais. Gain
+réel mais faible. Confirme que le problème du v1 n'est pas un problème de
+réglage.
 
-| | |
-|---|---|
-| **Objectif** | donner un risque aux communes sans historique |
-| **Méthode** | 30 clusters par k-means sur profil physique (**jamais sur `y`**), puis lissage bayésien à deux niveaux : commune → cluster → national |
-| **Garde-fou** | les taux sont ajustés en *leave-one-year-out*, avec **remise à exposition constante** — sans quoi l'année exclue biaise le dénominateur |
-| **Résultat** | PR-AUC **0,0177 · ×73,4** — soit **+1,3 %** sur le v2 |
-| **Conclusion** | gain réel mais **modeste**, et à peine significatif au bootstrap apparié. Le dire est un résultat : le clustering territorial rapporte quatre fois moins que le simple réglage des hyperparamètres. |
+### Modèle v3 · lissage bayésien, 52 variables
 
-### DART — v3 avec abandon d'arbres
+Ajoute une typologie territoriale en 30 groupes, formée sans regarder la
+cible, et un lissage bayésien qui fait retomber chaque commune vers le taux
+de son groupe. Meilleur modèle du projet en PR-AUC : 0,0156 sur le test,
+lift 93,8. Non déployé, pour les raisons de la diapo 24.
 
-| | |
-|---|---|
-| **Objectif** | tester une régularisation différente (dropout sur les arbres) |
-| **Résultat** | PR-AUC 0,0174 · **−1,8 %, IC [−5,0 ; +0,8]** |
-| **Conclusion** | **indiscernable de v3.** L'intervalle traverse zéro. |
+### DART · v3 avec abandon d'arbres
 
-### MLP — réseau dense, 52 features
+Variante de XGBoost où des arbres sont ignorés à chaque itération, ce qui
+limite en principe le surapprentissage. Écart avec v3 : −1,8 %, intervalle
+[−5,0 ; +0,8]. Indiscernable.
 
-| | |
-|---|---|
-| **Objectif** | satisfaire l'exigence « réseau de neurones » de l'énoncé, et tester une famille de modèle différente |
-| **Architecture** | 3 couches denses, BatchNorm, dropout, early stopping ; entraîné sur GPU |
-| **Résultat** | PR-AUC 0,0173 · **−1,9 %, IC [−7,9 ; +5,2]** |
-| **Conclusion** | **indiscernable de v3.** Un gradient boosting et un réseau dense font le même travail sur des features tabulaires. |
+### MLP · réseau dense, 52 variables
 
-### Modèle C — physique pure, 41 features ⭐ *le déployé*
+Réseau dense sur variables normalisées. Écart avec v3 : −1,9 %, intervalle
+[−7,9 ; +5,2]. Indiscernable également.
 
-| | |
-|---|---|
-| **Objectif** | être **déployable** : ne dépendre d'aucune donnée indisponible à l'avance |
-| **Retiré** | les 7 features d'historique de feux, `lat`, `lon`, et les 3 taux dérivés de `y` |
-| **Pourquoi `lat`/`lon`** | elles encodent « le Sud brûle ». Vrai aujourd'hui, et exactement le préjugé à ne pas transporter en 2050 |
-| **Résultat validation** | PR-AUC 0,0112 · ×46,4 · **−36,8 % vs v3** |
-| **Résultat test** | PR-AUC 0,0106 · **×63,7** |
-| **Validation croisée spatiale** | **gagne 9 régions sur 9**, +8,2 % pondéré, jusqu'à +137 % |
-| **Conclusion** | moins bon là où l'historique existe, **meilleur là où il manque** — c'est-à-dire en temps réel et en 2050 |
+### Modèle C · physique pure, 41 variables, le modèle déployé
 
-### LSTM — séquence de 30 jours
+Aucune variable dérivée de l'historique des feux. Uniquement météo,
+occupation du sol, relief, densité, littoral, calendrier.
 
-| | |
-|---|---|
-| **Objectif** | tester si une représentation temporelle **apprise** bat les décalages faits à la main |
-| **Entrée** | 30 jours × 8 indices CEMS = 240 valeurs, plus 30 descripteurs de territoire et calendrier |
-| **N'a PAS** | l'historique des feux, ni `danger_effis` |
-| **Réglage** | 25 essais Optuna, 7 hyperparamètres, arrêt précoce (époque 21) |
-| **Résultat** | PR-AUC 0,0085 · ×35,4 |
-| **Comparaison loyale** | contre le modèle C : **−23,6 %, IC [−33,5 ; −17,3]** — significatif |
-| **Conclusion** | les indices CEMS **sont déjà** des états récursifs ; le LSTM devrait réapprendre ce qu'on lui donne en entrée |
+Test 2023-2025 : PR-AUC 0,0106, lift 63,7.
 
-### Ensemble — moyenne de rangs v3 + MLP
+Déployé parce qu'il est le seul à ne dépendre d'aucune donnée indisponible en
+temps réel, et parce qu'il gagne les 9 régions en validation croisée
+spatiale.
 
-| | |
-|---|---|
-| **Résultat** | PR-AUC 0,0180 · ×74,9 · **+2,0 % vs v3** |
-| **Conclusion** | gain réel mais faible, au prix de deux modèles en production. Non retenu. |
+### LSTM · séquence de 30 jours
+
+Entrée : 30 jours × 8 indices météo, soit 240 valeurs par exemple. 25 essais
+Optuna, arrêt précoce à l'époque 21.
+
+Écart avec le modèle C, à information égale : −23,6 %, intervalle
+[−33,5 ; −17,3]. L'écart est réel et significatif.
+
+Réserve connue : ne reçoit pas `danger_effis`, donc le chiffre est un
+majorant.
+
+### Ensemble · moyenne de rangs v3 + MLP
+
+PR-AUC 0,0180, lift 74,9 sur la validation. Meilleur que chacun de ses
+composants, au prix de deux modèles à faire tourner en production. Non
+retenu : le gain ne justifie pas le doublement de la chaîne de service.
 
 ### Modèles secondaires
 
-| Modèle | Cible | Résultat | Conclusion |
-|---|---|---|---|
-| Régression de surface | hectares brûlés | **R² 0,14** | **échec assumé** — pire que la médiane |
-| Classification « grand feu » | surface > 5 ha | **PR-AUC 0,232 · lift 2,9×** (base 8,1 %) · ROC-AUC 0,766 | modeste, à ne pas survendre |
-
-> ⚠️ **Piège à éviter sur le « grand feu ».** On est tenté de citer la ROC-AUC
-> de 0,77, qui sonne bien. Mais on vient d'expliquer pourquoi la ROC-AUC flatte
-> sur un problème déséquilibré : s'en servir ici serait se contredire. Le
-> chiffre honnête est le **lift de 2,9×**, à comparer aux 63,7× du modèle
-> principal. Dire : *« on sait un peu anticiper les grands feux, beaucoup
-> moins bien que les départs »*.
-| SARIMAX national | nombre de communes-jours en feu | MAE 4,03 · **−21,5 % vs référence saisonnière** | la météo porte la prévisibilité |
+- Surface brûlée, régression : R² 0,14, MAE 3,94 ha. Non exploitable.
+- Grand feu, classification au seuil de 5 ha : PR-AUC 0,232, lift 2,88,
+  ROC-AUC 0,766. Faible.
 
 ---
 
-## Annexe B · Questions attendues, et réponses
+## Annexe B · Questions attendues
 
 ### Sur la méthode
 
-**« Pourquoi ne pas avoir utilisé l'accuracy ? »**
-> À 0,019 % de positifs, répondre toujours « non » donne 99,98 %. L'accuracy
-> ne distingue pas un bon modèle d'un modèle vide.
+**Pourquoi ne pas avoir utilisé l'exactitude ?**
+Parce qu'à 0,019 % de positifs, répondre toujours non donne 99,98 %. La
+métrique doit être la PR-AUC, et le lift en est la lecture parlante.
 
-**« Pourquoi pas de validation croisée classique ? »**
-> Parce que le problème est temporel. Un *k-fold* aléatoire mettrait des jours
-> voisins de part et d'autre du découpage : le modèle « prédirait » un feu
-> qu'il a vu à 20 km et un jour d'écart. J'ai en revanche fait une validation
-> croisée **spatiale**, par région, qui répond à une vraie question : que vaut
-> le modèle sur un territoire inconnu ?
+**Pourquoi 200 répliques de bootstrap et pas 1 000 ?**
+Au-delà de 200, la largeur des intervalles ne bouge plus de façon utile,
+alors que le coût est linéaire. Les conclusions ne dépendent pas de ce
+choix : les intervalles qui traversent zéro le traversent largement.
 
-**« Comment savez-vous qu'il n'y a pas de fuite ? »**
-> Trois règles explicites, et des tests qui les vérifient : la base ne stocke
-> que des faits, les statistiques dérivées de `y` s'ajustent sur le train
-> seul, et une feature datée ne regarde que le passé strict — borne haute la
-> veille. Un test vérifie aussi que la PR-AUC reste sous 0,80 : au-delà, sur
-> un événement à 0,019 %, il faut chercher la fuite.
+**Pourquoi rééchantillonner les communes et pas les lignes ?**
+Parce que les 1 096 jours d'une même commune ne sont pas indépendants, et que
+31 communes partagent la même maille météo. Un bootstrap ligne à ligne
+traiterait 38 millions d'observations comme 38 millions d'expériences
+indépendantes, et donnerait des intervalles faussement étroits.
 
-**« Votre modèle est-il calibré ? »**
-> Non, et c'est délibéré. Le score brut est 145 fois trop grand à cause du
-> sous-échantillonnage. Platt corrige à ×1,13, mais ce calibrateur a été
-> ajusté sur un autre modèle et une autre période — il serait faux d'un
-> facteur 2. J'affiche donc un **rang**, qui reste juste.
+**Comment savez-vous qu'il n'y a pas de fuite ?**
+Par une règle explicite appliquée à chaque variable : une variable datée peut
+regarder tout le passé, une statistique non datée ne peut regarder que le
+train. Et par des tests : 50 tournent à chaque commit, dont deux dédiés au
+split et à l'absence de fuite.
+
+**Avez-vous regardé le test plusieurs fois ?**
+Une seule, après gel complet. Toutes les comparaisons de modèles, tous les
+réglages et la calibration ont été faits sur la validation.
 
 ### Sur les modèles
 
-**« Pourquoi XGBoost et pas un réseau de neurones ? »**
-> J'ai fait les deux. Le MLP fait 0,0173 contre 0,0177 : **indiscernable**,
-> l'intervalle traverse zéro. Sur des features tabulaires, les deux familles
-> font le même travail. J'ai gardé le gradient boosting parce qu'il s'entraîne
-> en 30 secondes contre plusieurs minutes, et qu'il donne des explications
-> SHAP exactes.
+**Pourquoi pas de deep learning plus élaboré ?**
+J'ai testé un LSTM, qui perd de 23,6 % à information égale, et j'explique
+pourquoi : les indices du système canadien sont déjà des états récursifs, le
+CEMS livre l'état caché que le réseau devrait réapprendre. Un modèle plus
+gros ne changerait pas cette structure.
 
-**« Votre LSTM était-il assez entraîné ? »**
-> 25 essais Optuna sur sept hyperparamètres, avec arrêt précoce. Et sa
-> défaite est explicable *a priori* : les indices DC, DMC et BUI sont déjà des
-> moyennes exponentielles de la météo passée. Je lui demandais de réapprendre
-> ce que je lui donnais en entrée.
+**Pourquoi déployer le modèle le moins performant ?**
+Parce que la variable qui fait la différence n'existe pas en temps réel, vaut
+zéro en territoire inconnu, et est impossible par construction pour 2050. Le
+choix se fait sur la disponibilité, pas sur la métrique. Et l'écart vaut 3
+points de rappel à 1 % de budget, rien à 10 %.
 
-**« Pourquoi ne déployez-vous pas le meilleur modèle ? »**
-> Parce que le meilleur a besoin d'une donnée qui n'existe pas au moment de
-> prédire. La BDIFF ne publie pas l'année en cours. Le choix se fait sur la
-> disponibilité de la donnée, pas sur le score — et la validation croisée
-> spatiale confirme que le modèle physique gagne dès qu'on sort du territoire
-> connu.
+**Comment expliquez-vous que DART et le MLP soient équivalents à XGBoost ?**
+Je ne l'explique pas, je le constate : leurs intervalles traversent zéro. La
+lecture la plus probable est que le signal disponible est capté de façon
+comparable par les trois familles, et que la limite est dans les données, pas
+dans l'architecture.
 
 ### Sur les données
 
-**« 0,68 % des feux écartés, n'est-ce pas beaucoup ? »**
-> C'est 965 feux sur 142 787, et l'alternative était pire. Rapprocher par le
-> nom donnait des faux positifs entre départements. Un feu attribué à la
-> mauvaise commune corrompt la cible, le voisinage et les features CORINE de
-> cette commune. J'ai préféré compter ce que je perds.
+**965 feux avec un code INSEE disparu, comment les avez-vous traités ?**
+Par le fichier officiel des mouvements de communes de l'INSEE. 935 sont
+rattachés avec certitude, 30 sont écartés et comptés. Aucun n'a été deviné
+par le nom, parce que le nom produit des faux positifs.
 
-**« Vos données couvrent-elles tout le territoire ? »**
-> Métropole seulement. L'outre-mer est hors de la couverture météo européenne
-> et absent de CORINE : 1 378 feux exclus, comptés et documentés. Et la BDIFF
-> n'est pas homogène avant 2006 — d'où la période retenue.
+**Pourquoi 253 millions de lignes plutôt que la liste des feux ?**
+Parce qu'une série creuse rend les fenêtres glissantes silencieusement
+fausses : remonter 30 lignes ne remonte pas 30 jours si les jours sans feu
+sont absents.
+
+**La BDIFF est-elle exhaustive ?**
+Non, et le projet le documente. La couverture varie selon les départements et
+les périodes, et 64 % des causes déclarées sont manquantes. C'est une limite
+de la cible, pas seulement des variables.
 
 ### Sur les projections
 
-**« Prédisez-vous les feux de 2050 ? »**
-> Non. Je projette l'**aléa météo** sous trois scénarios du GIEC. Le nombre de
-> feux dépend aussi de la prévention et des pratiques agricoles, que je
-> suppose constantes — hypothèse explicite et certainement fausse.
+**Comment projetez-vous jusqu'en 2100 ?**
+En appliquant un facteur multiplicatif issu des scénarios GIEC à la
+climatologie observée sur 2006-2019. La forme de la saison vient des
+observations, seul son niveau est décalé.
 
-**« Pourquoi le nombre de feux n'augmente-t-il pas ? »**
-> Trois explications compatibles : la puissance statistique est faible sur 19
-> points annuels ; la prévention absorbe la hausse de l'aléa ; et l'aléa n'est
-> pas le bilan. Je ne tranche pas — les données ne le permettent pas.
+**Pourquoi le RCP 2.6 apparaît-il parfois au-dessus du RCP 8.5 ?**
+Parce qu'avant 2045 les scénarios sont indiscernables : en 2030, le 2.6
+dépasse le 8.5 sur 59 % des communes. C'est l'inertie du système climatique,
+les trajectoires ne divergent qu'après le milieu du siècle. L'application
+grise cette zone.
 
-### Questions pièges
+**Peut-on en déduire le nombre de feux en 2050 ?**
+Non. Je projette l'aléa météo, pas le bilan. La végétation, la prévention et
+les pratiques agricoles sont supposées constantes, ce qui est faux.
 
-**« Votre modèle est-il utile ? »**
-> À ×63,7, surveiller 1 % du territoire capture environ 39 % des départs. La
-> comparaison honnête n'est pas au hasard mais au danger EFFIS officiel, qui
-> vaut ×5 seul. Le modèle apporte donc un facteur 12 sur la pratique actuelle.
+### Questions plus difficiles
 
-**« Qu'est-ce qui vous a le plus surpris ? »**
-> Que 2024, l'année la plus calme, donne le **meilleur** lift. Une année calme
-> concentre les feux dans les endroits prévisibles ; quand tout brûle, le
-> modèle est pris en défaut.
+**Votre modèle est-il utilisable par un SDIS demain matin ?**
+Pas en l'état. Il donne un classement national par jour, ce qui répond à « où
+regarder en priorité », mais il n'est pas calibré en probabilité, il ne tient
+pas compte des moyens disponibles, et il n'a pas été évalué en conditions
+opérationnelles. Ce qu'il fournit est une aide au ciblage.
 
-**« Qu'auriez-vous fait avec plus de temps ? »**
-> Trois choses, dans l'ordre : donner `danger_effis` au LSTM pour lever
-> l'asymétrie ; remplir `vacances_scolaires`, aujourd'hui à `false` partout ;
-> et tester un rattachement des feux nocturnes à la veille, puisque le FWI est
-> défini à midi solaire et qu'un feu déclaré à 3 h du matin est piloté par les
-> conditions de la veille.
+**Qu'est-ce qui vous dit que le modèle n'a pas simplement appris la
+géographie ?**
+Il n'a ni latitude ni longitude. La carte qu'il produit retrouve pourtant les
+Landes, l'arc méditerranéen et la Corse, à partir de la végétation, du relief
+et du littoral. Et la validation croisée spatiale montre qu'il transfère à
+des régions retirées de l'entraînement.
+
+**Si vous aviez trois mois de plus ?**
+Dans l'ordre : donner `danger_effis` au LSTM pour lever l'asymétrie de la
+comparaison, refaire une calibration propre sur le modèle déployé et sur la
+bonne période, et chercher une source de cause de départ moins lacunaire que
+les 64 % de valeurs manquantes actuelles.
+
+**Quelle est l'erreur qui vous a coûté le plus cher ?**
+Le désalignement des lignes, parce qu'il ne lève aucune exception et donne un
+résultat plausible. J'ai failli conclure que le LSTM perdait de 97 %.
 
 ---
 
@@ -900,27 +1034,44 @@ réseau profond — LIME redeviendrait le bon outil.
 
 | Terme | Définition courte |
 |---|---|
-| **FWI** | *Fire Weather Index* — indice canadien de danger météo, standard européen via EFFIS |
-| **DC / DMC / BUI** | composantes du FWI : moyennes exponentielles de la météo passée, constantes de temps 52 j / 15 j / dérivée |
-| **PR-AUC** | aire sous la courbe précision-rappel ; vaut le taux de base au hasard |
-| **lift** | PR-AUC ÷ taux de base — « combien de fois mieux que le hasard » |
-| **bootstrap apparié** | rééchantillonnage où les deux modèles voient les **mêmes** lignes à chaque réplique, ce qui annule la variance commune |
-| **biais de collision** | biais introduit en conditionnant sur une variable influencée par les deux qu'on étudie |
-| **TreeSHAP** | calcul **exact** des valeurs de Shapley sur un modèle à base d'arbres |
-| **contrefactuel** | point proche que le modèle classerait différemment |
-| **RCP** | *Representative Concentration Pathway* — trajectoire d'émissions du GIEC ; le chiffre est le forçage radiatif en 2100, en W/m² |
-| **lissage bayésien** | estimation d'un taux rare en le rappelant vers celui d'un groupe plus large |
-| **ADF** | test de Dickey-Fuller augmenté ; H₀ = série **non** stationnaire |
-| **PACF** | autocorrélation partielle — donne l'ordre AR d'un modèle |
+| FWI | Fire Weather Index, indice synthétique du système canadien |
+| DC / DMC / BUI | codes de sécheresse à mémoire longue (52 j), moyenne (15 j), et combustible disponible |
+| PR-AUC | aire sous la courbe précision-rappel ; vaut le taux de base au hasard |
+| lift | PR-AUC divisée par le taux de base : combien de fois mieux que le hasard |
+| ACF / PACF | autocorrélation, et autocorrélation partielle (apport propre d'un retard) |
+| ADF | test de Dickey-Fuller augmenté ; H₀ = racine unitaire = non stationnaire |
+| SARIMAX | ARIMA saisonnier avec variables exogènes |
+| SHAP | décomposition exacte d'un score en contributions par variable |
+| LIME | substitut linéaire local, approché |
+| DiCE | génération de contrefactuels : que faudrait-il changer |
+| RCP | Representative Concentration Pathway, scénario d'émissions du GIEC |
+| Pseudo-réplication | traiter des observations corrélées comme indépendantes |
+| Biais de collision | conditionner sur une variable causée par deux autres, ce qui crée une association artificielle |
 
 ---
 
-## Rappel des commandes
+## Annexe D · Commandes
+
+Régénérer le diaporama après un changement de résultats :
 
 ```bash
-python -m tvfed.comparer      # bootstrap apparié, produit comparaison_appariee.csv
-python -m tvfed.explications  # SHAP sur le modèle C
-python -m tvfed.export_app    # met à jour app/donnees
-python -m tvfed.diaporama     # régénère soutenance.pptx
-pytest tests/ -q              # 50 tests
+python -m tvfed.comparer && python -m tvfed.diaporama
+```
+
+Relancer l'analyse de séries temporelles (ADF, ACF/PACF, SARIMAX) :
+
+```bash
+python -m tvfed.series
+```
+
+Lancer l'application en local :
+
+```bash
+streamlit run app/Carte.py
+```
+
+Faire tourner les tests :
+
+```bash
+pytest tests/ -q
 ```

@@ -45,7 +45,8 @@ def _lire():
     d = {}
     for nom in ("pr_auc_val", "comparaison_appariee", "transfert_spatial",
                 "test_par_annee", "baselines", "calibration_v3",
-                "series_sarimax", "modeles_ensemble"):
+                "series_sarimax", "modeles_ensemble", "series_adf",
+                "series_acf_pacf", "operationnel_test", "modele_c_test"):
         f = PROCESSED / f"{nom}.csv"
         d[nom] = pd.read_csv(f) if f.exists() else None
     # ⚠️ lu depuis le CSV, et non recopié : la ROC-AUC du modèle « grand feu »
@@ -174,14 +175,40 @@ class Deck:
             y += 1.5
         return s, y
 
+    # à 1 pt = 0,03528 cm, une ligne occupe 1,2 × la taille de police, et un
+    # caractère de Calibri en bas de casse vaut environ la moitié de sa taille.
+    PT = 0.03528
+    LARG_CAR = 0.50
+    INTERLIGNE = 1.25
+
+    def _lignes(self, txt, w, taille):
+        """Combien de lignes ce texte occupera une fois replié."""
+        par_ligne = max(1, int((w - 0.25) / (taille * self.PT * self.LARG_CAR)))
+        return max(1, -(-len(txt) // par_ligne))
+
     def puces(self, s, items, x, y, w, taille=15, ecart=1.55):
-        """Une liste, avec un tiret cadratin plutôt qu'une puce Office."""
-        for i, it in enumerate(items):
+        """Une liste, avec un point médian plutôt qu'une puce Office.
+
+        Le séparateur était un tiret cadratin ; comme chaque item non gras en
+        recevait un, la seule mise en page produisait mécaniquement des
+        dizaines de tirets dans le diaporama.
+
+        ⚠️ L'ÉCART ENTRE ITEMS EST UN MINIMUM, PLUS UN PAS FIXE.
+        python-pptx n'ajuste rien : un item de trois lignes posé tous les
+        1,26 cm recouvrait le suivant, sans que rien ne le signale avant
+        l'ouverture du fichier. On avance donc de la hauteur réellement
+        nécessaire quand elle dépasse l'écart demandé.
+        """
+        cur = y
+        for it in items:
             gras = it.startswith("**")
-            self._texte(s, ("— " if not gras else "") + it.replace("**", ""),
-                        x, y + i * ecart, w, ecart, taille,
+            txt = ("· " if not gras else "") + it.replace("**", "")
+            besoin = (self._lignes(txt, w, taille)
+                      * taille * self.PT * 1.2 * self.INTERLIGNE)
+            self._texte(s, txt, x, cur, w, max(ecart, besoin), taille,
                         INK if gras else MUTED, gras)
-        return y + len(items) * ecart
+            cur += max(ecart, besoin + 0.06)
+        return cur
 
     def tableau(self, s, entetes, lignes, x, y, w, h, larg=None, taille=13,
                 fort=()):
@@ -322,6 +349,8 @@ def _figures_soutenance(D) -> dict:
 # ════════════════════════════════════════════════════════════════════════
 #  le diaporama
 # ════════════════════════════════════════════════════════════════════════
+
+
 def main() -> None:
     D = _lire()
     G = _figures_soutenance(D)
@@ -337,40 +366,136 @@ def main() -> None:
     def ec(ref, mod):
         return cmp_[(cmp_.reference == ref) & (cmp_.modele == mod)].iloc[0]
 
-    # ── 1. titre ────────────────────────────────────────────────────────
+    IMG = RACINE / "docs" / "img"
+
+    # ════════════════════════════════════════════════════════════════════
+    #  TITRE
+    # ════════════════════════════════════════════════════════════════════
     s = d.titre("Projet de fin d'année · M1 Data / IA · La Plateforme_",
                 "Où va-t-il brûler\ndemain ?",
-                "Prédire le risque de départ de feu pour chacune des 34 734\n"
-                "communes de France métropolitaine, chaque jour,\nde 1973 à 2100.",
+                "Estimer le risque de départ de feu pour chacune des 34 734\n"
+                "communes de France métropolitaine, chaque jour,\n"
+                "de 1973 à 2100.",
                 "Romuald Courtois")
-    d._image(s, RACINE / "docs" / "img" / "carte.png", 20.5, 2.4, 11.5, 14.2)
-    d.notes(s, "Le modèle retrouve seul les Landes, l'arc méditerranéen et la "
-               "Corse — sans jamais voir de carte : ni lat ni lon ne font "
-               "partie de ses variables.")
+    d._image(s, IMG / "carte.png", 20.5, 2.4, 11.5, 14.2)
+    d.notes(s, "Cette carte est produite par le modèle. Il retrouve seul les "
+               "Landes, l'arc méditerranéen et la Corse, alors que ni la "
+               "latitude ni la longitude ne font partie de ses variables. "
+               "C'est la végétation et le relief qui portent cette géographie.")
 
-    # ── 2 ───────────────────────────────────────────────────────────────
-    d.section("01", "Le problème",
-              "Un événement rare, quatre sources, 253 millions de lignes")
+    # ════════════════════════════════════════════════════════════════════
+    #  01 · INTRODUCTION
+    # ════════════════════════════════════════════════════════════════════
+    d.section("01", "Introduction",
+              "Le phénomène, et ce qui manque aux outils existants")
 
-    # ── 3. la rareté ────────────────────────────────────────────────────
-    s, y = d.page("Ce qui rend le problème difficile",
-                  "Un départ de feu est un événement RARE.")
+    # ── contexte ────────────────────────────────────────────────────────
+    s, y = d.page("Le phénomène",
+                  "52 809 feux déclarés sur le périmètre d'étude, entre 1973 "
+                  "et 2025.")
+    d._image(s, FIG / "data-bdiff" /
+             "03_feux-par-jour-de-l-annee-cumul-sur-53-ans.png",
+             d.L, y, 18.5, 9.6)
+    d.puces(s, [
+        "**Deux saisons, pas une**",
+        "Le pic d'août est celui qu'on attend : l'arc méditerranéen, la Corse, "
+        "un été sec.",
+        "Celui de mars est moins connu. Il concerne le Sud-Ouest et le Massif "
+        "central, et il ne relève pas de la même végétation : ce sont des "
+        "landes et des herbacées sèches avant la reprise, souvent des écobuages "
+        "qui échappent.",
+        "**Une conséquence pour le modèle**",
+        "Un modèle qui n'apprendrait que l'été raterait un feu sur cinq. La "
+        "saisonnalité doit donc entrer comme variable, et pas comme filtre.",
+    ], 21, y, 11.2, 13.5, 1.2)
+    d.notes(s, "Point de départ concret. Si on demande d'où vient le pic de "
+               "mars : Cantal 52 % de ses feux hors saison estivale, Dordogne "
+               "44 %, Lozère 41 %. Ces chiffres sont calculés dans "
+               "l'application, page Les données.")
+
+    # ── ce qui existe déjà ──────────────────────────────────────────────
+    s, y = d.page("Ce qui existe déjà, et ce qui manque",
+                  "Le danger météo est un service public. La question posée "
+                  "ici commence là où il s'arrête.")
+    d.tableau(s, ["", "Ce que fournit le danger météo (EFFIS, Météo-France)",
+                  "Ce que ce projet ajoute"], [
+        ["Objet mesuré", "l'inflammabilité de l'air et du combustible",
+         "la probabilité qu'un départ soit déclaré"],
+        ["Maille", "0,25°, soit environ 28 km",
+         "la commune"],
+        ["Territoire", "non pris en compte",
+         "végétation, relief, densité, littoral"],
+        ["Horizon", "quelques jours",
+         "1973 à 2100, trois scénarios GIEC"],
+    ], d.L, y, 30, 5.6, larg=[5.5, 13, 11.5])
+    d.encart(s, "À l'intérieur d'une même maille météo de 28 km, on trouve en "
+                "moyenne 31 communes. Elles reçoivent aujourd'hui le même "
+                "indice de danger, qu'elles soient couvertes de maquis ou "
+                "bétonnées.\nC'est précisément l'écart que ce travail cherche "
+                "à combler : la météo dit quand, elle ne dit pas où.",
+             d.L, y + 6.4, 30, 4, BLEU, 15)
+    d.notes(s, "Formuler l'apport sans exagérer : on ne remplace pas le FWI, "
+               "on l'utilise comme entrée principale et on lui ajoute une "
+               "résolution spatiale qu'il n'a pas.")
+
+    # ════════════════════════════════════════════════════════════════════
+    #  02 · QUESTION DE RECHERCHE
+    # ════════════════════════════════════════════════════════════════════
+    d.section("02", "Question de recherche",
+              "Une question principale, quatre hypothèses testables")
+
+    # ── la question ─────────────────────────────────────────────────────
+    s, y = d.page("La question")
+    d.encart(s, "Peut-on estimer, à l'échelle du couple commune × jour, la "
+                "probabilité qu'un départ de feu soit déclaré, à partir des "
+                "seules données publiques disponibles en temps réel ?",
+             d.L, y, 30, 3.6, ROUGE, 21)
+    d._texte(s, "Quatre hypothèses, chacune vérifiable, chacune réfutable",
+             d.L, y + 4.6, 30, 1.2, 17, INK, True)
+    d.tableau(s, ["", "Hypothèse", "Comment on la teste"], [
+        ["H1", "La météo seule ne suffit pas à localiser le risque",
+         "baseline « danger EFFIS seul », comparée au croisement avec le "
+         "territoire"],
+        ["H2", "Le territoire apporte une information que la météo ne porte pas",
+         "SHAP sur deux populations, et validation croisée par région"],
+        ["H3", "Une architecture séquentielle n'apporte rien de plus que des "
+               "indices physiques agrégés",
+         "LSTM contre modèle physique, à information égale, bootstrap apparié"],
+        ["H4", "Le danger météo augmente de façon détectable sur 53 ans",
+         "régression de tendance sur quatre séries, avec test de "
+         "significativité"],
+    ], d.L, y + 6.2, 30, 7.4, larg=[1.8, 12.2, 16])
+    d.notes(s, "Insister sur le fait que H3 est formulée dans le sens qui "
+               "permet de la réfuter : si le LSTM avait gagné, on l'aurait "
+               "déployé. Le résultat n'était pas décidé d'avance.")
+
+    # ── la difficulté ───────────────────────────────────────────────────
+    s, y = d.page("Ce qui rend la question difficile",
+                  "Un départ de feu est un événement rare.")
     d._texte(s, "0,019 %", d.L, y + .3, 14, 3.4, 66, ROUGE, True, 1)
     d._texte(s, "des couples commune × jour comptent\nau moins un départ de feu",
              d.L, y + 4, 14, 2.4, 15, MUTED)
     d.puces(s, [
-        "**Un modèle qui répond toujours « non » a 99,98 % de justesse.**",
-        "Et ne sert strictement à rien.",
-        "**Une fuite de données ne produit pas d'erreur.**",
-        "Elle produit d'excellentes métriques et un modèle sans valeur.",
-        "**Le déséquilibre commande TOUT le reste.**",
-        "La métrique, l'échantillonnage, la calibration, et jusqu'à la façon "
-        "de comparer deux modèles.",
+        "**Répondre toujours « non » donne 99,98 % de justesse**",
+        "et ne sert à rien. L'exactitude est inutilisable ici.",
+        "**Une fuite de données ne provoque pas d'erreur**",
+        "elle produit d'excellentes métriques et un modèle sans valeur. Rien "
+        "dans les scores ne la signale.",
+        "**Le déséquilibre commande le reste du protocole**",
+        "la métrique, l'échantillonnage, la calibration, et jusqu'à la façon "
+        "de comparer deux modèles entre eux.",
     ], 17.5, y + .4, 14.5, 15, 1.35)
-    d.notes(s, "Insister : ce n'est pas un détail technique, c'est la "
-               "contrainte qui explique chacune des décisions suivantes.")
+    d.notes(s, "C'est la contrainte qui explique chacune des décisions "
+               "méthodologiques présentées ensuite. Le dire maintenant évite "
+               "de le justifier cinq fois.")
 
-    # ── 4. les sources ──────────────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════════
+    #  03 · MÉTHODOLOGIE
+    # ════════════════════════════════════════════════════════════════════
+    d.section("03", "Méthodologie",
+              "Les données, le protocole, et ce qui protège le résultat")
+
+    # ── les sources ─────────────────────────────────────────────────────
     s, y = d.page("Quatre sources publiques, croisées",
                   "Jointure sur le code INSEE et sur une grille météo de 0,25°.")
     d.tableau(s, ["Source", "Ce qu'elle apporte", "Volume"], [
@@ -382,18 +507,20 @@ def main() -> None:
         ["INSEE", "référentiel des communes, et leurs fusions",
          "34 734 communes"],
     ], d.L, y, 30, 6, larg=[7, 14, 9])
-    d.encart(s, "LE POINT DÉLICAT N'EST PAS LE VOLUME : CE SONT LES FUSIONS DE "
-                "COMMUNES.\n965 feux portent un code INSEE disparu. Les "
-                "rapprocher par le nom donnait de faux positifs — « Chirac » "
-                "en Lozère renvoyait vers la Charente. On a téléchargé le "
-                "fichier officiel des mouvements de communes de l'INSEE ; les "
-                "30 cas restants sont écartés et comptés, jamais devinés.",
+    d.encart(s, "Le point délicat n'est pas le volume, ce sont les fusions de "
+                "communes.\n965 feux portent un code INSEE qui n'existe plus. "
+                "Les rapprocher par le nom produisait de faux positifs : "
+                "« Chirac » en Lozère renvoyait vers la Charente. On a donc "
+                "utilisé le fichier officiel des mouvements de communes de "
+                "l'INSEE, et les 30 cas restants sont écartés et comptés, "
+                "jamais devinés.",
              d.L, y + 6.8, 30, 4.4, ORANGE, 14)
     d.notes(s, "Une heuristique par le nom aurait « résolu » tous les cas et "
-               "corrompu y, le voisinage et les features CORINE de communes "
-               "innocentes. Perdre 0,68 % des feux est préférable.")
+               "corrompu la cible, le voisinage et les features CORINE de "
+               "communes innocentes. Perdre 0,68 % des feux coûte moins cher "
+               "que d'en inventer.")
 
-    # ── 5. la grille ────────────────────────────────────────────────────
+    # ── la grille ───────────────────────────────────────────────────────
     s, y = d.page("La table centrale : commune × jour",
                   "Une ligne par commune et par jour, qu'il y ait eu un feu "
                   "ou non.")
@@ -403,91 +530,146 @@ def main() -> None:
         ["test", "2023-2025", "38 068 464", "6 322", "0,0166 %"],
         ["total", "2006-2025", "253 731 870", "49 130", "0,0194 %"],
     ], d.L, y, 24, 5.4, fort=(3,))
-    d.encart(s, "POURQUOI UNE GRILLE DENSE, ET NON LA SEULE LISTE DES FEUX\n"
+    d.encart(s, "Pourquoi une grille dense plutôt que la seule liste des feux\n"
                 "Parce qu'une série creuse rendrait les fenêtres glissantes "
                 "silencieusement fausses. « Feux des 30 jours précédents » se "
                 "calcule en remontant 30 lignes : si les jours sans feu sont "
                 "absents, on remonte en réalité plusieurs années.",
              d.L, y + 6.2, 30, 3.8, BLEU, 14)
     d.notes(s, "253 millions de lignes plutôt que 52 809 : c'est un choix "
-               "coûteux, et il a une raison technique précise.")
+               "coûteux en stockage et en temps de calcul, et il a une raison "
+               "technique précise. PostgreSQL avec 20 partitions annuelles.")
 
-    # ── 6 ───────────────────────────────────────────────────────────────
-    d.section("02", "Le protocole",
-              "Ce qui protège le résultat — avant même de parler de modèles")
-
-    # ── 7. le split ─────────────────────────────────────────────────────
+    # ── le split ────────────────────────────────────────────────────────
     s, y = d.page("La barrière du split",
-                  "Découpage TEMPOREL, jamais aléatoire.")
+                  "Découpage temporel, jamais aléatoire.")
     d.puces(s, [
-        "**train · 2006-2019 — apprendre**",
-        "177,6 M lignes. Tout ce qui a un .fit() s'ajuste ici, et nulle part "
-        "ailleurs.",
-        "**validation · 2020-2022 — choisir**",
+        "**train · 2006-2019 · apprendre**",
+        "177,6 M lignes. Tout ce qui possède un .fit() s'ajuste ici, et nulle "
+        "part ailleurs.",
+        "**validation · 2020-2022 · choisir**",
         "Hyperparamètres, sélection du modèle, calibration, comparaisons.",
-        "**test · 2023-2025 — juger, UNE SEULE FOIS**",
+        "**test · 2023-2025 · juger, une seule fois**",
         "Ouvert après gel complet. Aucune décision n'en découle.",
     ], d.L, y, 17, 15, 1.4)
-    d.encart(s, "Un découpage ALÉATOIRE mettrait le 14 juillet 2019 dans le "
+    d.encart(s, "Un découpage aléatoire mettrait le 14 juillet 2019 dans le "
                 "train et le 15 dans le test. Le modèle « prédirait » un feu "
                 "qu'il a déjà vu, à 20 km et un jour d'écart.",
              19.5, y + .2, 12.6, 3.6, ROUGE, 14)
-    d.encart(s, "LA RÈGLE QUI TRANCHE LES CAS DOUTEUX\nUne feature DATÉE peut "
+    d.encart(s, "La règle qui tranche les cas douteux\nUne feature datée peut "
                 "regarder tout le passé, y compris celui de sa propre période "
-                "d'évaluation.\nUne statistique NON DATÉE ne peut regarder que "
+                "d'évaluation.\nUne statistique non datée ne peut regarder que "
                 "le train.", 19.5, y + 4.6, 12.6, 4.4, BLEU, 14)
-    d.notes(s, "« Feux des 30 jours précédents » au 3 août 2023 lit juillet "
-               "2023 : ce n'est pas une fuite, le 3 août à 8 h on connaît "
-               "juillet. « Taux moyen de la commune sur toute la période » lit "
-               "le futur — c'en est une.")
+    d.notes(s, "Exemple à donner si on demande : « feux des 30 jours "
+               "précédents » au 3 août 2023 lit juillet 2023, et ce n'est pas "
+               "une fuite, car le 3 août à 8 h on connaît juillet. « Taux moyen "
+               "de la commune sur toute la période » lit le futur, et c'en est "
+               "une.")
 
-    # ── 8. la métrique ──────────────────────────────────────────────────
+    # ── la métrique ─────────────────────────────────────────────────────
     s, y = d.page("Pourquoi PR-AUC, et pas ROC-AUC",
-                  "La métrique n'est pas un détail : à 0,019 %, elle décide de "
-                  "ce qu'on croit avoir réussi.")
+                  "À 0,019 % de positifs, le choix de la métrique décide de ce "
+                  "qu'on croit avoir réussi.")
     d.tableau(s, ["", "ROC-AUC", "PR-AUC"], [
         ["Ce qu'elle mesure", "vrais positifs contre faux positifs",
          "précision contre rappel"],
         ["Valeur au hasard", "0,50, quel que soit le déséquilibre",
          "exactement le taux de base"],
-        ["À 0,019 % de positifs", "flatteuse — un modèle médiocre affiche 0,95",
+        ["À 0,019 % de positifs", "flatteuse : un modèle médiocre affiche 0,95",
          "lisible : le rapport donne le lift"],
     ], d.L, y, 30, 5.2, larg=[7, 11.5, 11.5])
     d._texte(s, "lift  =  PR-AUC ÷ taux de base",
              d.L, y + 6.2, 30, 1.6, 26, INK, True)
-    d._texte(s, "« combien de fois mieux que tirer au sort » — un nombre qui "
-                "se dit à voix haute", d.L, y + 8.2, 30, 1.4, 16, MUTED)
-    d.notes(s, "C'est souvent la première question d'un jury : pourquoi pas "
-               "l'accuracy. Répondre par le chiffre : 99,98 % de justesse en "
+    d._texte(s, "combien de fois mieux que tirer au sort, un nombre qui se dit "
+                "à voix haute", d.L, y + 8.2, 30, 1.4, 16, MUTED)
+    d.notes(s, "C'est souvent la première question posée : pourquoi pas "
+               "l'exactitude. Répondre par le chiffre, 99,98 % de justesse en "
                "répondant toujours non.")
 
-    # ── 9. le prior ─────────────────────────────────────────────────────
+    # ── le prior ────────────────────────────────────────────────────────
     s, y = d.page("Le piège du sous-échantillonnage",
-                  "Le train est réduit à 1 positif pour 10 négatifs — sans "
-                  "quoi l'entraînement serait ingérable.")
+                  "Le train est réduit à 1 positif pour 10 négatifs, sans quoi "
+                  "l'entraînement serait ingérable.")
     d._texte(s, "× 487", d.L, y + .4, 13, 3.4, 60, ORANGE, True, 1)
     d._texte(s, "l'écart entre le prior appris (9,1 %)\net le prior réel "
                 "(0,019 %)", d.L, y + 4.1, 14, 2.4, 15, MUTED)
     d.puces(s, [
-        "**Validation et test ne sont JAMAIS échantillonnés.**",
-        "C'est ce qui rend les scores comparables au monde réel.",
-        "**Les statistiques dérivées de y se calculent sur le train COMPLET.**",
-        "Sur l'échantillon, un lissage bayésien vaudrait 9,1 % au lieu de "
+        "**Validation et test ne sont jamais échantillonnés**",
+        "c'est ce qui rend les scores comparables au monde réel.",
+        "**Les statistiques dérivées de la cible se calculent sur le train "
+        "complet**",
+        "sur l'échantillon, un lissage bayésien vaudrait 9,1 % au lieu de "
         "0,019 %. Le prior serait empoisonné, et rien dans les métriques ne "
         "le signalerait.",
-        "**La calibration absorbe le décalage.**",
+        "**La calibration absorbe le décalage**",
         "Platt ramène le biais de ×144,7 à ×1,13, sans rien coûter en PR-AUC.",
     ], 17.5, y + .3, 14.5, 14.5, 1.3)
-    d.notes(s, "Ce piège est invisible : le modèle marche, les métriques sont "
-               "bonnes, seul le niveau absolu des probabilités est faux.")
+    d.notes(s, "Ce piège est invisible : le modèle fonctionne, les métriques "
+               "sont bonnes, seul le niveau absolu des probabilités est faux. "
+               "C'est pour cette raison que l'application affiche un rang.")
 
-    # ── 10 ──────────────────────────────────────────────────────────────
-    d.section("03", "Les modèles",
-              "Six modèles, et deux conclusions contre-intuitives")
+    # ── le protocole de comparaison ─────────────────────────────────────
+    s, y = d.page("Comment comparer deux modèles sans se tromper",
+                  "Un écart de PR-AUC entre deux modèles n'est pas un "
+                  "résultat tant qu'on ignore le bruit qui l'entoure.")
+    d.puces(s, [
+        "**Bootstrap apparié**",
+        "Les deux modèles sont évalués sur exactement les mêmes lignes, "
+        "rééchantillonnées ensemble, 200 fois. On mesure la distribution de "
+        "l'écart, pas deux distributions séparées.",
+        "**On rééchantillonne les communes, pas les lignes**",
+        "Les 1 096 jours d'une même commune ne sont pas indépendants, et 31 "
+        "communes partagent la même maille météo. Tirer ligne à ligne "
+        "reviendrait à traiter 38 millions d'observations comme 38 millions "
+        "d'expériences indépendantes.",
+    ], d.L, y, 30, 15, 1.24)
+    d.encart(s, "C'est le point de méthode le plus important de cette partie. "
+                "Un bootstrap ligne à ligne donne des intervalles beaucoup "
+                "trop étroits, et fait conclure à des différences qui "
+                "n'existent pas. Le terme consacré est la pseudo-réplication.",
+             d.L, y + 6.4, 30, 3.2, ROUGE, 15)
+    d.encart(s, "Détail d'implémentation : la moyenne pondérée des précisions "
+                "est recalculée par tri unique puis sommes cumulées, au lieu "
+                "d'appeler scikit-learn 200 fois. Le résultat est identique à "
+                "1e-12 près, et la comparaison complète tient en quelques "
+                "minutes au lieu de plusieurs heures.",
+             d.L, y + 10, 30, 3.2, GRIS, 14)
+    d.notes(s, "Si on demande pourquoi 200 répliques : au-delà, la largeur des "
+               "intervalles ne bouge plus de façon utile, et le coût est "
+               "linéaire.")
 
-    # ── 11. les baselines ───────────────────────────────────────────────
-    s, y = d.page("Contre quoi se bat-on ?",
-                  "Sans référence, un lift de 73× ne veut rien dire.")
+    # ── les modèles comparés ────────────────────────────────────────────
+    s, y = d.page("Les modèles mis en concurrence",
+                  "Chacun teste une idée précise, et non « essayons de voir ».")
+    d.tableau(s, ["Modèle", "L'idée qu'il teste", "Entrées"], [
+        ["Baselines (3)", "que valent des règles sans apprentissage",
+         "historique, danger EFFIS, et leur croisement"],
+        ["XGBoost v1", "un gradient boosting standard suffit-il",
+         "météo, territoire, historique brut"],
+        ["XGBoost v3", "peut-on donner un risque aux communes sans historique",
+         "v1 + lissage bayésien sur 30 groupes"],
+        ["DART", "l'abandon d'arbres améliore-t-il la généralisation",
+         "identiques à v3"],
+        ["MLP", "un réseau dense fait-il mieux que des arbres",
+         "identiques à v3, normalisées"],
+        ["XGBoost C", "que reste-t-il sans aucun historique de feu",
+         "météo et territoire seulement, 41 features"],
+        ["LSTM", "la séquence météo porte-t-elle un signal en propre",
+         "30 jours × 8 indices, soit 240 valeurs"],
+    ], d.L, y, 30, 9, larg=[6, 14, 10], taille=12.5)
+    d.notes(s, "Le modèle C est celui qui répond à la contrainte de "
+               "déploiement, et c'est aussi la seule référence honnête face au "
+               "LSTM, puisqu'aucun des deux ne voit l'historique des feux.")
+
+    # ════════════════════════════════════════════════════════════════════
+    #  04 · RÉSULTATS
+    # ════════════════════════════════════════════════════════════════════
+    d.section("04", "Résultats",
+              "Ce que mesurent les données, avant toute interprétation")
+
+    # ── les baselines ───────────────────────────────────────────────────
+    s, y = d.page("La barre à battre",
+                  "Sans référence, un lift de 63× ne veut rien dire.")
     b = D["baselines"]
     d.tableau(s, ["Prédicteur, sans aucun apprentissage", "PR-AUC", "lift"],
               [[r.predicteur, f"{r.pr_auc:.4f}", f"×{r.lift:.1f}"]
@@ -496,38 +678,40 @@ def main() -> None:
                   f"{mt['test']['pr_auc']:.4f}", f"×{mt['test']['lift']:.1f}"]],
               d.L, y, 25, 6.6, larg=[15, 5, 5], fort=(len(b),))
     d.encart(s, "L'historique spatial seul vaut déjà ×19, la météo seule ×5, "
-                "et leur croisement ×42.\nC'EST LA BARRE À BATTRE — pas le "
+                "et leur croisement ×42.\nC'est la barre à battre, et non le "
                 "hasard. Un modèle à ×30 serait moins bon qu'une règle de "
-                "trois.", d.L, y + 7.4, 30, 3, VERT, 15)
-    d.notes(s, "Montrer qu'on a cherché à se rendre la tâche difficile plutôt "
-               "qu'à se flatter d'un grand chiffre.")
+                "trois, tout en paraissant excellent.",
+             d.L, y + 7.4, 30, 3, VERT, 15)
+    d.notes(s, "Première réponse à H1 : la météo seule plafonne à ×5, le "
+               "croisement avec le territoire monte à ×42. L'écart entre les "
+               "deux est la moitié de la réponse à la question de recherche.")
 
-    # ── 12. v1 → v3 ─────────────────────────────────────────────────────
-    s, y = d.page("Du v1 au v3 : donner un risque aux communes sans histoire",
-                  "Le v1 tirait 54,6 % de son importance de l'historique de la "
-                  "commune. Il disait surtout : « ce qui a brûlé rebrûlera ».")
+    # ── v1 → v3 ─────────────────────────────────────────────────────────
+    s, y = d.page("Donner un risque aux communes sans historique",
+                  "Le v1 tirait 54,6 % de son importance de l'historique de "
+                  "la commune. Il disait surtout que ce qui a brûlé rebrûlera.")
     d._image(s, FIG / "modele-v3" /
              "02_le-lissage-bayesien-rendre-une-estimation-aux-communes-sans.png",
              d.L, y, 18.5, 10.5)
     d.puces(s, [
-        "**Le trou**",
+        "**Le problème**",
         "Une commune qui n'a jamais brûlé gardait un score bas, même entourée "
         "de communes qui brûlent chaque été.",
-        "**La parade**",
-        "Regrouper les communes qui se ressemblent PHYSIQUEMENT — 30 groupes "
-        "formés sans jamais regarder le feu — puis faire retomber chaque "
+        "**La réponse**",
+        "Regrouper les communes qui se ressemblent physiquement, en 30 groupes "
+        "formés sans jamais regarder le feu, puis faire retomber chaque "
         "commune vers le taux de son groupe, à proportion de ce qu'on sait "
         "d'elle.",
         "**Le gain, mesuré**",
-        "+0,83 % de PR-AUC. Réel, mais modeste — et le dire est aussi un "
+        "+0,83 % de PR-AUC. Réel mais modeste, et le dire fait partie du "
         "résultat.",
     ], 21.3, y, 10.9, 13, 1.22)
-    d.notes(s, "C'est le problème classique de small area estimation. Ce qui "
-               "compte méthodologiquement : les groupes sont formés sans "
-               "regarder y, la sinistralité n'entre qu'après.")
+    d.notes(s, "C'est le problème classique d'estimation sur petits domaines. "
+               "Le point méthodologique : les groupes sont formés sans "
+               "regarder la cible, la sinistralité n'entre qu'ensuite.")
 
-    # ── 13. les six modèles ─────────────────────────────────────────────
-    s, y = d.page("Les six modèles, sur la même validation",
+    # ── les modèles comparés (5, lus dans pr_auc_val.csv) ───────────────
+    s, y = d.page("Les modèles, sur la même validation",
                   "38 068 464 communes-jours, 9 176 feux, taux 0,0241 %.")
     lignes = []
     for nom in sorted(ap, key=ap.get, reverse=True):
@@ -539,96 +723,140 @@ def main() -> None:
     ens = D["modeles_ensemble"]
     if ens is not None:
         d._texte(s, f"L'ensemble v3 + MLP monte à {ens.pr_auc.iloc[0]:.4f} "
-                    f"(×{ens.lift.iloc[0]:.1f}) — au prix de deux modèles à "
+                    f"(×{ens.lift.iloc[0]:.1f}), au prix de deux modèles à "
                     f"faire tourner en production.",
                  d.L, y + 7.3, 30, 1.4, 14, MUTED)
-    d.encart(s, "AUCUN de ces écarts n'a été retenu sans intervalle de "
-                "confiance. Diapositive suivante.",
+    d.encart(s, "Aucun de ces écarts n'a été retenu sans intervalle de "
+                "confiance. C'est l'objet de la diapositive suivante.",
              d.L, y + 8.8, 30, 2.2, ROUGE, 16)
-    d.notes(s, "Ne pas commenter le classement ici : le commentaire n'a de "
-               "sens qu'avec les intervalles.")
+    d.notes(s, "Ne pas commenter le classement ici. Le commentaire n'a de sens "
+               "qu'une fois les intervalles affichés, et c'est justement "
+               "l'erreur que l'on veut éviter de commettre devant le jury.")
 
-    # ── 14. le graphique en forêt ───────────────────────────────────────
+    # ── le graphique en forêt ───────────────────────────────────────────
     s, y = d.page("Ces écarts survivent-ils au bruit ?",
                   "Bootstrap apparié, 200 répliques, rééchantillonnage des "
-                  "34 734 COMMUNES — pas des lignes.")
-    d._image(s, RACINE / "docs" / "img" / "modeles.png", d.L, y, 30, 8.2)
-    d.encart(s, "LE RÉSULTAT LE PLUS UTILE DU PROJET EST UN RÉSULTAT NÉGATIF.\n"
+                  "34 734 communes.")
+    d._image(s, IMG / "modeles.png", d.L, y, 30, 8.2)
+    d.encart(s, "Le résultat le plus instructif de cette partie est négatif.\n"
                 f"DART et le MLP paraissaient "
                 f"{abs(ec('XGBoost v3','DART').ecart_pct):.1f} % et "
                 f"{abs(ec('XGBoost v3','MLP').ecart_pct):.1f} % moins bons. "
-                "Leurs intervalles TRAVERSENT ZÉRO : les trois modèles sont "
-                "indiscernables. Annoncer « XGBoost bat le MLP » aurait été "
-                "une conclusion inventée à partir du bruit.",
+                "Leurs intervalles traversent zéro : les trois modèles sont "
+                "indiscernables. Annoncer que XGBoost bat le MLP aurait été "
+                "une conclusion tirée du bruit.",
              d.L, y + 8.8, 30, 3.8, ROUGE, 15)
-    d.notes(s, "Pourquoi rééchantillonner les communes et non les lignes : les "
-               "1 096 jours d'une même commune ne sont pas indépendants, et 31 "
-               "communes partagent la même maille météo. Un bootstrap ligne à "
-               "ligne donnerait des intervalles faussement étroits, et ferait "
-               "conclure à tort.")
+    d.notes(s, "Ce que cette diapositive démontre vraiment, c'est que le "
+               "protocole sait dire « je ne sais pas ». Un protocole qui "
+               "conclut toujours quelque chose ne conclut rien.")
 
-    # ── 15. le LSTM, 1 ──────────────────────────────────────────────────
-    s, y = d.page("« Pour le temps, prends un LSTM »",
-                  "Le réflexe standard. On l'a construit, optimisé, et mesuré.")
+    # ── H3 · le LSTM, protocole et résultat ─────────────────────────────
+    s, y = d.page("H3 · la séquence météo apporte-t-elle un signal en propre ?",
+                  "Le réflexe standard face à une série temporelle. On l'a "
+                  "construit, optimisé, puis mesuré.")
     p = D["params_lstm"]
     d.tableau(s, ["Hyperparamètre", "Valeur retenue"],
               [[k, f"{v:.5g}"] for k, v in p.items()],
               d.L, y, 13, 7.6, larg=[7.5, 5.5], taille=12)
     d._texte(s, "25 essais Optuna, arrêt précoce à l'époque 21.\n"
-                "L'objection « il n'a pas été fine-tuné » ne tient pas.",
+                "L'objection « il n'a pas été réglé » ne tient pas.",
              d.L, y + 8.3, 15, 2.4, 15, MUTED)
     l_c = ec("XGBoost C", "LSTM")
     d._texte(s, f"{l_c.ecart_pct:.1f} %", 18.5, y + .8, 13.5, 3.4, 62,
              ROUGE, True, 1)
     d._texte(s, f"contre le modèle C, à information égale\n"
-                f"intervalle [{l_c.ic_bas:.1f} ; {l_c.ic_haut:.1f}] — "
+                f"intervalle [{l_c.ic_bas:.1f} ; {l_c.ic_haut:.1f}], "
                 f"loin de zéro", 18.5, y + 4.5, 13.5, 2.4, 16, MUTED)
-    d.encart(s, "LA COMPARAISON LOYALE N'EST PAS CELLE QU'ON CROIT\n"
-                "XGBoost v3 voit l'historique des feux — 29 % de ses "
+    d.encart(s, "La comparaison loyale n'est pas celle qu'on croit\n"
+                "XGBoost v3 voit l'historique des feux, soit 29 % de ses "
                 "importances. Le LSTM n'en voit rien. Les opposer mesurerait "
                 "le prix de l'information retirée, pas la valeur de la "
                 "séquence. La seule référence à jeu d'information égal est le "
                 "modèle C.", 18.5, y + 7.5, 13.5, 4.8, ORANGE, 14)
-    d.notes(s, "Le LSTM voit 30 jours × 8 indices = 240 valeurs ; le modèle C "
-               "voit les 8 indices du jour plus deux décalages. Vingt fois "
+    d.notes(s, "Le LSTM voit 30 jours × 8 indices, soit 240 valeurs. Le modèle "
+               "C voit les 8 indices du jour plus deux décalages. Vingt fois "
                "plus d'historique météo, et il perd.")
 
-    # ── 16. le LSTM, 2 ──────────────────────────────────────────────────
-    s, y = d.page("Pourquoi il perd — l'explication est physique",
+    # ── H3 · l'explication ──────────────────────────────────────────────
+    s, y = d.page("Pourquoi il perd : l'explication est physique",
                   "Un LSTM sert quand l'ordre de la séquence porte une "
                   "information qu'aucun résumé ne capture. Ici, ce résumé "
                   "existe déjà.")
-    d.encart(s, "Les indices DC, DMC et BUI du système canadien SONT des états "
-                "récursifs.\nLe Drought Code est une moyenne exponentielle de "
-                "la météo passée, avec une constante de temps de 52 jours ; "
-                "le Duff Moisture Code, de 15 jours.\nC'est exactement la "
-                "forme d'une cellule récurrente — sauf que ses coefficients "
-                "ont été calibrés par cinquante ans de science du feu, plutôt "
-                "qu'estimés sur 9 176 exemples positifs.",
-             d.L, y, 30, 5.6, VERT, 16)
+    d.encart(s, "Les indices DC, DMC et BUI du système canadien sont des états "
+                "récursifs. Le Drought Code est une moyenne exponentielle de "
+                "la météo passée, de constante de temps 52 jours ; le Duff "
+                "Moisture Code, 15 jours.\nC'est la forme d'une cellule "
+                "récurrente, à ceci près que ses coefficients ont été calibrés "
+                "par cinquante ans de science du feu plutôt qu'estimés sur "
+                "9 176 exemples positifs.",
+             d.L, y, 30, 4.2, VERT, 15)
     d._texte(s, "Le CEMS livre déjà l'état caché que le LSTM devrait "
-                "réapprendre.", d.L, y + 5.9, 30, 1.4, 20, INK, True)
+                "réapprendre.", d.L, y + 4.5, 30, 1.3, 19, INK, True)
+    acf = D["series_acf_pacf"]
     sar = D["series_sarimax"]
     r_ar = (sar[sar.modele.str.contains("sans exogène")].correlation.iloc[0]
             if sar is not None else float("nan"))
-    d.puces(s, [
-        "**Trois observations indépendantes convergent**",
-        "la PACF montre une autocorrélation épuisée en deux à trois jours ;",
-        f"l'ARIMA sans exogène est inutilisable — r = {r_ar:.3f}, la "
-        f"corrélation est NÉGATIVE ;",
-        "les trois premières features du modèle C sont part_maquis, "
-        "danger_effis et erc : le signal dit OÙ il y a du combustible.",
-    ], d.L, y + 7.4, 30, 15, 1.15)
-    d.encart(s, "Ce n'est pas une prévision de série temporelle. C'est une "
-                "CLASSIFICATION SPATIO-TEMPORELLE D'ÉVÉNEMENT RARE, sur "
-                "34 734 séries parallèles pilotées par un exogène déjà résumé "
-                "par la physique du domaine.",
-             d.L, y + 11.5, 30, 2.1, ROUGE, 15)
-    d.notes(s, "Réserve honnête, à donner spontanément : le LSTM ne reçoit pas "
-               "danger_effis, qui pèse 13,7 % dans le modèle C. L'écart de "
-               "23,6 % est donc un majorant.")
+    if acf is not None:
+        p1, p2, p3 = acf.pacf.iloc[0], acf.pacf.iloc[1], acf.pacf.iloc[2]
+        p8, sl = acf.pacf.iloc[7], acf.seuil.iloc[0]
+        yy = d.puces(s, [
+            "**Trois observations indépendantes convergent**",
+            f"la PACF des résidus tombe de {p1:.2f} au premier retard à "
+            f"{p3:.2f} au troisième : la mémoire utile de la série est de deux "
+            f"à trois jours ;",
+            f"l'ARIMA sans exogène est inutilisable, avec r = {r_ar:.3f}, une "
+            f"corrélation négative ;",
+            "les trois premières variables du modèle C sont part_maquis, "
+            "danger_effis et erc : le signal dit surtout où se trouve le "
+            "combustible.",
+        ], d.L, y + 6.1, 30, 14, 1.1)
+        d.encart(s, f"Nuance : les retards 4 à 8 restent significatifs. Avec "
+                    f"7 305 jours le seuil descend à ±{sl:.3f}, et presque "
+                    f"tout le devient. Le retard 8, à {p8:.3f}, rend compte de "
+                    f"{100 * p8 ** 2:.2f} % de la variance. Significatif ne "
+                    f"veut pas dire utile.",
+                 d.L, yy + 0.3, 30, 2.2, GRIS, 13.5)
+    d.notes(s, "Réserve à donner spontanément, sans attendre la question : le "
+               "LSTM ne reçoit pas danger_effis, qui pèse 13,7 % dans le "
+               "modèle C. L'écart de 23,6 % est donc un majorant, et c'est la "
+               "première chose à reprendre.")
 
-    # ── 17. v3 contre C ─────────────────────────────────────────────────
+    # ── les séries temporelles ──────────────────────────────────────────
+    s, y = d.page("Ce que le passé de la série prédit à lui seul",
+                  "Un détour par les méthodes classiques, qui sert de "
+                  "contre-épreuve au LSTM.")
+    adf = D["series_adf"]
+    if adf is not None:
+        d.tableau(s, ["Série testée", "stat ADF", "p", "Conclusion"],
+                  [[r.serie, f"{r.adf:.2f}", f"{r.p:.1e}",
+                    "stationnaire" if r.stationnaire else "non stationnaire"]
+                   for _, r in adf.iterrows()],
+                  d.L, y, 14.5, 5, larg=[6, 3, 3, 2.5], taille=12)
+        d._texte(s, "H₀ est « la série a une racine unitaire », donc non "
+                    "stationnaire. Rejeter H₀ signifie stationnaire, ce qui "
+                    "est l'inverse de l'intuition.",
+                 d.L, y + 5.4, 14.5, 2.4, 13, MUTED)
+    if sar is not None:
+        d.tableau(s, ["Modèle", "MAE", "r"],
+                  [[r.modele, f"{r.mae:.2f}", f"{r.correlation:.3f}"]
+                   for _, r in sar.iterrows()],
+                  17.5, y, 14.5, 4, larg=[9, 2.8, 2.7], taille=12,
+                  fort=(len(sar) - 1,))
+        d._texte(s, "Ajusté sur 2006-2019, évalué sur 2020-2022. Le test "
+                    "2023-2025 n'est pas touché, même pour une cible "
+                    "différente.", 17.5, y + 4.4, 14.5, 2, 13, MUTED)
+    d.encart(s, "La dernière ligne est celle qui compte. Un ARIMA sans "
+                "variable exogène donne une corrélation négative : à 1 096 "
+                "pas d'horizon, un modèle autorégressif dont la mémoire utile "
+                "vaut trois jours a oublié son point de départ et converge "
+                "vers la moyenne.\nAjouter le FWI fait tomber l'erreur de "
+                "37 %. La prévisibilité du feu est dans la météo, pas dans son "
+                "propre passé.", d.L, y + 8.2, 30, 4.4, ORANGE, 15)
+    d.notes(s, "Ce détour n'est pas décoratif : il montre que la conclusion "
+               "sur le LSTM ne dépend pas d'une seule expérience, mais de "
+               "trois familles de méthodes qui disent la même chose.")
+
+    # ── v3 contre C ─────────────────────────────────────────────────────
     s, y = d.page("Le meilleur modèle n'est pas celui qu'on déploie",
                   "C'est la décision la plus contre-intuitive du projet.")
     d.tableau(s, ["Sur le test 2023-2025", "PR-AUC", "lift"], [
@@ -637,45 +865,48 @@ def main() -> None:
         ["XGBoost C · physique pure, 41 features", f"{mt['test']['pr_auc']:.4f}",
          f"×{mt['test']['lift']:.1f}"],
     ], d.L, y, 19, 3.2, larg=[11, 4, 4], fort=(1,))
-    d.puces(s, [
-        "**1. La donnée n'existe pas en temps réel.**",
-        "v3 tire 29 % de son importance de l'historique des feux. Or la BDIFF "
+    yy = d.puces(s, [
+        "**1. La donnée n'existe pas en temps réel**",
+        "v3 tire 29 % de son importance de l'historique des feux, et la BDIFF "
         "ne publie pas l'année en cours : les feux de 2026 sortiront au "
         "printemps 2027. Aujourd'hui, feux_commune_7j vaudrait le décompte "
-        "d'une semaine de décembre 2025. Pas imprécis : FAUX.",
-        "**2. En territoire inconnu, elle vaut zéro.**",
-        "Et le modèle lit ce zéro comme « ça n'a jamais brûlé, donc ça ne "
-        "brûlera pas » — précisément là où le risque nouveau apparaît.",
-        "**3. Pour 2050, elle est impossible par construction.**",
-        "On ne connaîtra jamais les feux de 2049.",
-    ], d.L, y + 4, 30, 14.5, 1.15)
-    d.encart(s, "LE CHOIX SE FAIT SUR LA DISPONIBILITÉ DE LA DONNÉE, PAS SUR "
-                "LA PERFORMANCE.\nEt ce défaut n'apparaît dans AUCUNE métrique "
+        "d'une semaine de décembre 2025. Pas imprécis : faux.",
+        "**2. En territoire inconnu, elle vaut zéro**",
+        "et le modèle lit ce zéro comme « ça n'a jamais brûlé, donc ça ne "
+        "brûlera pas », précisément là où un risque nouveau apparaît.",
+        "**3. Pour 2050, elle est impossible par construction**",
+        "on ne connaîtra jamais les feux de 2049.",
+    ], d.L, y + 3.7, 30, 13.5, 1.05)
+    d.encart(s, "Le choix se fait sur la disponibilité de la donnée, pas sur "
+                "la performance. Ce défaut n'apparaît dans aucune métrique "
                 "d'entraînement : en validation comme en test, l'historique "
-                "est toujours là. Il ne se voit qu'en pensant au déploiement.",
-             d.L, y + 11.2, 30, 2.4, ROUGE, 15)
+                "est toujours là.",
+             d.L, yy + 0.3, 30, 1.8, ROUGE, 14)
     d.notes(s, "Dans l'application, un basculement permet de comparer les deux "
-               "modèles — et il REFUSE de le faire ailleurs que sur le test.")
+               "modèles, et il refuse de le faire ailleurs que sur le test, en "
+               "expliquant pourquoi pour chaque période.")
 
-    # ── 18. validation croisée spatiale ─────────────────────────────────
-    s, y = d.page("La preuve : retirer une région entière, puis tester dessus",
-                  "Simulation d'un territoire jamais vu — ou d'un climat qui "
+    # ── validation croisée spatiale ─────────────────────────────────────
+    s, y = d.page("H2 · retirer une région entière, puis tester dessus",
+                  "Simulation d'un territoire jamais vu, ou d'un climat qui "
                   "déplace le risque.")
     if "spatial" in G:
         d._image(s, G["spatial"], d.L, y, 30, 8.8)
     d.encart(s, "Le modèle physique gagne dans les 9 régions, sans exception : "
                 "+8,2 % en moyenne pondérée, et jusqu'à +137 % dans le Grand "
-                "Est.\nLà où l'historique est le plus pauvre, s'y fier est un "
-                "HANDICAP. C'est l'argument décisif pour 2050 : le climat va "
-                "déplacer le risque vers des communes qui n'ont pas de passé.",
+                "Est.\nLà où l'historique est le plus pauvre, s'y fier devient "
+                "un handicap. C'est l'argument décisif pour 2050, puisque le "
+                "climat déplacera le risque vers des communes sans passé.",
              d.L, y + 9.4, 30, 3.4, VERT, 15)
     d.notes(s, "Protocole : on retire une région du train, on entraîne, on "
-               "teste sur la région exclue. Neuf fois, une par région.")
+               "teste sur la région exclue, neuf fois. C'est la réponse la plus "
+               "directe à H2 : le territoire porte une information qui "
+               "transfère, l'historique non.")
 
-    # ── 19. la calibration ──────────────────────────────────────────────
-    s, y = d.page("La calibration, et pourquoi l'app affiche un rang",
-                  "Le score brut est 145 fois trop grand — c'est le "
-                  "sous-échantillonnage qui remonte.")
+    # ── la calibration ──────────────────────────────────────────────────
+    s, y = d.page("La calibration, et pourquoi l'application affiche un rang",
+                  "Le score brut est 145 fois trop grand, conséquence directe "
+                  "du sous-échantillonnage.")
     cal = D["calibration_v3"]
     d.tableau(s, ["Méthode", "PR-AUC", "p moyen", "biais", "valeurs distinctes"],
               [[r.methode, f"{r.pr_auc:.4f}", f"{r.p_moyen:.2e}",
@@ -684,22 +915,23 @@ def main() -> None:
                for _, r in cal.iterrows()],
               d.L, y, 25, 4.4, larg=[5, 5, 5, 5, 5], fort=(1,))
     d.puces(s, [
-        "**Platt corrige sans rien coûter.**",
-        "Le classement est intact, seule l'échelle bouge.",
-        "**L'isotonique calibre aussi bien, mais écrase le score.**",
+        "**Platt corrige sans rien coûter**",
+        "le classement reste intact, seule l'échelle bouge.",
+        "**L'isotonique calibre aussi bien, mais écrase le score**",
         "136 valeurs distinctes au lieu de 9 millions : on perd du pouvoir de "
-        "discrimination pour rien.",
-        "**L'application affiche donc un RANG, pas une probabilité.**",
-        "Le calibrateur disponible a été ajusté sur un autre modèle et une "
-        "autre période : il serait faux d'un facteur ~2. Un rang, lui, reste "
-        "juste.",
+        "discrimination sans rien gagner.",
+        "**L'application affiche donc un rang, pas une probabilité**",
+        "le calibrateur disponible a été ajusté sur un autre modèle et une "
+        "autre période, il serait faux d'un facteur voisin de 2. Un rang, lui, "
+        "reste juste.",
     ], d.L, y + 5.2, 30, 15, 1.3)
-    d.notes(s, "Dire qu'on a préféré ne PAS afficher une probabilité plutôt "
-               "que d'en afficher une fausse. C'est un choix, pas un oubli.")
+    d.notes(s, "Le point à faire passer : on a préféré ne pas afficher de "
+               "probabilité plutôt que d'en afficher une fausse. C'est un "
+               "choix documenté, pas un oubli.")
 
-    # ── 20. l'évaluation test ───────────────────────────────────────────
-    s, y = d.page("L'évaluation finale — ouverte une seule fois",
-                  "Après gel complet du modèle, des features et de la "
+    # ── le test ─────────────────────────────────────────────────────────
+    s, y = d.page("L'évaluation finale, ouverte une seule fois",
+                  "Après gel complet du modèle, des variables et de la "
                   "calibration.")
     tpa = D["test_par_annee"]
     d.tableau(s, ["Année", "Lignes", "Feux", "Taux", "PR-AUC", "lift"],
@@ -709,87 +941,51 @@ def main() -> None:
                for _, r in tpa.iterrows()],
               d.L, y, 24, 4.4, larg=[3.5, 6, 4, 4.5, 3.5, 2.5])
     mx, mn = tpa.loc[tpa.lift.idxmax()], tpa.loc[tpa.lift.idxmin()]
-    d.encart(s, f"LE LIFT VARIE DU SIMPLE AU DOUBLE, ET CE N'EST PAS DU BRUIT — "
-                f"IL SUIT LA RARETÉ.\n"
+    d.encart(s, f"Le lift varie du simple au double, et cette variation suit "
+                f"la rareté.\n"
                 f"{int(mx.an)} est l'année la plus calme ({int(mx.feux)} feux) "
-                f"et donne le MEILLEUR lift (×{mx.lift:.0f}) ; {int(mn.an)}, "
+                f"et donne le meilleur lift (×{mx.lift:.0f}) ; {int(mn.an)}, "
                 f"la plus active, le plus faible (×{mn.lift:.0f}).\n"
                 f"Une année calme concentre les feux dans les endroits les "
-                f"plus prévisibles. Quand tout brûle — y compris là où ce "
-                f"n'est pas censé arriver — le modèle est pris en défaut.",
+                f"plus prévisibles. Quand tout brûle, y compris là où ce n'est "
+                f"pas attendu, le modèle est pris en défaut.",
              d.L, y + 5.2, 30, 4.6, ORANGE, 15)
-    d.notes(s, "C'est contre-intuitif, et c'est le genre de chose qu'un jury "
-               "apprécie : on a regardé la variabilité, pas seulement la "
-               "moyenne.")
+    d.notes(s, "Regarder la variabilité et pas seulement la moyenne : le lift "
+               "moyen de 63× cache un intervalle de 76 à 151 selon l'année.")
 
-    # ── 21 ──────────────────────────────────────────────────────────────
-    d.section("04", "Comprendre le modèle",
-              "SHAP, LIME, DiCE — et pourquoi ils ne disent pas la même chose")
+    # ── le rendement opérationnel ───────────────────────────────────────
+    s, y = d.page("Ce que le modèle change concrètement",
+                  "Un lift ne se traduit pas directement en décision. La "
+                  "question utile est : si on peut surveiller 1 % du "
+                  "territoire, combien de feux couvre-t-on ?")
+    op = D["operationnel_test"]
+    if op is not None:
+        d.tableau(s, ["Budget de surveillance", "Communes-jours suivis",
+                      "Feux couverts", "Part des feux"],
+                  [[f"{r.budget:.1%}".replace(".", ","),
+                    f"{int(r.lignes):,}".replace(",", " "),
+                    f"{int(r.feux):,}".replace(",", " "),
+                    f"{r.rappel:.1%}".replace(".", ",")]
+                   for _, r in op.iterrows()],
+                  d.L, y, 26, 5.6, larg=[7, 7.5, 5.5, 6], taille=13,
+                  fort=(2,))
+    d.encart(s, "En surveillant 1 % des communes-jours, on couvre 42 % des "
+                "départs. Le rapport entre les deux est ce que le modèle "
+                "apporte réellement.\nAutre lecture, moins flatteuse et tout "
+                "aussi vraie : les 37 % de PR-AUC qui séparent v3 du modèle C "
+                "ne valent que 3 points de rappel à 1 % de budget, et plus "
+                "rien du tout à 10 %. Une grande partie de l'écart mesuré est "
+                "opérationnellement invisible.",
+             d.L, y + 6.4, 30, 4.6, BLEU, 15)
+    d.notes(s, "C'est la diapositive qui relie les métriques à une décision. "
+               "Si on demande pourquoi ne pas déployer v3 malgré son avance : "
+               "cette avance disparaît là où elle devrait servir.")
 
-    # ── 22. SHAP ────────────────────────────────────────────────────────
-    s, y = d.page("Qu'est-ce qui fait partir un feu ?",
-                  "Trois façons de poser la question, trois réponses — chacune "
-                  "juste, mais pas à la même question.")
-    if "shap" in G:
-        d._image(s, G["shap"], d.L, y, 30, 8.2)
-    d.encart(s, "danger_effis est 2ᵉ par gain et 30ᵉ par SHAP. Ce n'est pas une "
-                "erreur : c'est une discrétisation du FWI en six classes. "
-                "XGBoost adore ces seuils nets pour découper, mais "
-                "l'information est déjà dans le FWI continu — et SHAP lui en "
-                "attribue le crédit. L'IMPORTANCE PAR GAIN NE SAIT PAS GÉRER "
-                "LA REDONDANCE.\npart_maquis est 1ᵉʳ par gain, 10ᵉ sur "
-                "l'échantillon aléatoire, 2ᵉ au sommet : il ne change rien sur "
-                "une commune-jour moyenne, et devient déterminant là où le "
-                "modèle voit du risque.", d.L, y + 8.8, 30, 5, ROUGE, 14)
-    d.notes(s, "Morale à énoncer : ne jamais citer « la feature n°1 » sans "
-               "dire de quelle mesure il s'agit et sur quelle population. "
-               "TreeSHAP est EXACT sur un modèle d'arbres — vérifié : somme "
-               "des contributions plus valeur de base = logit du score, à "
-               "1e-6 près.")
-
-    # ── 23. DiCE ────────────────────────────────────────────────────────
-    s, y = d.page("DiCE — la seule question actionnable",
-                  "SHAP et LIME répondent à « pourquoi ce score ». DiCE répond "
-                  "à « qu'aurait-il fallu changer ».")
-    d.puces(s, [
-        "**Un exemple, mesuré**",
-        "Bormes-les-Mimosas, 99,9ᵉ percentile du 12 août 2024. On autorise à "
-        "modifier la végétation seule : maquis, forêt, part combustible, part "
-        "agricole.",
-        "**Résultat : aucun contrefactuel.**",
-        "Rien, sur ces leviers, ne fait sortir la commune du décile à risque. "
-        "Son exposition tient à sa position, à son relief, à sa superficie. "
-        "Le risque est STRUCTUREL — et c'est un résultat, pas un échec.",
-    ], d.L, y, 30, 16, 1.28)
-    d.encart(s, "UN DÉTAIL D'IMPLÉMENTATION QUI CHANGE TOUT\n"
-                "DiCE cherche par défaut à faire passer la probabilité sous "
-                "0,5. Or le score n'est pas calibré : 0,5 correspond à un "
-                "risque astronomique, et l'outil ne renvoyait jamais rien.\n"
-                "On a recentré la frontière sur le DÉCILE, par une "
-                "transformation strictement croissante qui laisse le "
-                "classement intact. La question devient « que faudrait-il pour "
-                "sortir des 10 % les plus à risque » — celle qui a un sens "
-                "opérationnel.", d.L, y + 5.4, 30, 5.2, BLEU, 14)
-    d.encart(s, "UN CONTREFACTUEL N'EST PAS UNE RECOMMANDATION. Rien ne "
-                "garantit qu'il soit réalisable — on ne convertit pas 40 % de "
-                "maquis en terres agricoles — ni que le lien soit causal : le "
-                "modèle a appris des corrélations, pas des mécanismes.",
-             d.L, y + 11.2, 30, 2.8, ORANGE, 14)
-    d.notes(s, "Si on demande pourquoi LIME : sur un modèle d'arbres il "
-               "approxime ce que TreeSHAP calcule exactement. On le montre "
-               "pour la comparaison, et parce qu'il redeviendrait le bon outil "
-               "sur un modèle qu'on ne peut pas ouvrir — une API, un réseau "
-               "profond.")
-
-    # ── 24 ──────────────────────────────────────────────────────────────
-    d.section("05", "Le climat",
-              "Ce que les données disent — et ce qu'elles ne disent pas")
-
-    # ── 25. la tendance ─────────────────────────────────────────────────
-    s, y = d.page("Le danger monte. Les feux, non.",
-                  "Deux fenêtres d'observation, deux conclusions — et il faut "
+    # ── H4 · le climat ──────────────────────────────────────────────────
+    s, y = d.page("H4 · le danger monte, les feux non",
+                  "Deux fenêtres d'observation, deux conclusions, et il faut "
                   "dire laquelle croire.")
-    d._image(s, RACINE / "docs" / "img" / "tendance.png", d.L, y, 30, 7.2)
+    d._image(s, IMG / "tendance.png", d.L, y, 30, 7.2)
     fa, fe = t("FWI moyen annuel"), t("FWI moyen juin-septembre")
     jd, fx = t("jours de danger élevé (FWI > 21,3)"), t("communes-jours en feu")
     d.tableau(s, ["Série", "Période", "Variation", "p", "Verdict"], [
@@ -800,144 +996,213 @@ def main() -> None:
         ["jours de danger élevé", f"{jd.an_min}-{jd.an_max}",
          f"{jd.variation_pct:+.0f} %", f"{jd.p:.1e}", "significatif"],
         ["communes-jours en feu", f"{fx.an_min}-{fx.an_max}",
-         f"{fx.variation_pct:+.0f} %", f"{fx.p:.2f}", "NON significatif"],
+         f"{fx.variation_pct:+.0f} %", f"{fx.p:.2f}", "non significatif"],
     ], d.L, y + 7.8, 27, 5, larg=[8, 5, 5, 4.5, 4.5], fort=(3,))
-    d.notes(s, "À DIRE EXACTEMENT : « les conditions favorables aux feux "
-               "augmentent très significativement, et le nombre de départs "
-               "reste stable — ce qui est cohérent avec une prévention qui "
-               "absorbe pour l'instant la hausse de l'aléa ». Ne JAMAIS dire "
-               "« les feux augmentent » : les données du projet ne le montrent "
-               "pas. Trois lectures possibles : puissance statistique "
-               "insuffisante sur 20 points, prévention efficace, et le fait "
-               "qu'on projette l'aléa et non le bilan.")
+    d.notes(s, "Formulation exacte à employer : les conditions favorables aux "
+               "feux augmentent très significativement, et le nombre de "
+               "départs reste stable. Ne jamais dire que les feux augmentent, "
+               "les données du projet ne le montrent pas. Trois lectures "
+               "possibles, à donner dans cet ordre : 20 points d'observation "
+               "seulement, une prévention qui absorbe pour l'instant la hausse "
+               "de l'aléa, et le fait qu'on projette l'aléa et non le bilan.")
 
-    # ── 26. les projections ─────────────────────────────────────────────
-    s, y = d.page("Projeter jusqu'en 2100 — et ce que ça ne veut PAS dire",
+    # ════════════════════════════════════════════════════════════════════
+    #  05 · INTERPRÉTATION
+    # ════════════════════════════════════════════════════════════════════
+    d.section("05", "Interprétation",
+              "Ce que le modèle a appris, et ce qu'on peut en faire")
+
+    # ── SHAP ────────────────────────────────────────────────────────────
+    s, y = d.page("Qu'est-ce qui fait partir un feu ?",
+                  "Trois façons de poser la question, trois réponses, chacune "
+                  "juste mais pas à la même question.")
+    if "shap" in G:
+        d._image(s, G["shap"], d.L, y, 30, 8.2)
+    d.encart(s, "danger_effis est 2ᵉ par gain et 30ᵉ par SHAP. C'est une "
+                "discrétisation du FWI en six classes : XGBoost trouve ces "
+                "seuils commodes pour découper, mais l'information est déjà "
+                "dans le FWI continu, et SHAP lui en attribue le crédit. "
+                "L'importance par gain ne sait pas traiter la redondance.\n"
+                "part_maquis est 1ᵉʳ par gain, 10ᵉ sur l'échantillon aléatoire "
+                "et 2ᵉ au sommet : il ne change rien sur une commune-jour "
+                "moyenne, et devient déterminant là où le modèle voit du "
+                "risque.", d.L, y + 8.8, 30, 5, ROUGE, 14)
+    d.notes(s, "Réponse à H1 et H2 réunies : les variables de territoire "
+               "occupent le haut du classement à égalité avec la météo. La "
+               "météo situe le moment, le territoire situe le lieu. Si on "
+               "demande la garantie : TreeSHAP est exact sur un modèle "
+               "d'arbres, vérifié à 9,5e-07 près.")
+
+    # ── DiCE ────────────────────────────────────────────────────────────
+    s, y = d.page("La seule question actionnable",
+                  "SHAP et LIME répondent à « pourquoi ce score ». DiCE répond "
+                  "à « qu'aurait-il fallu changer ».")
+    yy = d.puces(s, [
+        "**Un exemple, mesuré**",
+        "Bormes-les-Mimosas, 99,9ᵉ percentile du 12 août 2024. On autorise à "
+        "modifier la végétation seule : maquis, forêt, part combustible, part "
+        "agricole.",
+        "**Résultat : aucun contrefactuel**",
+        "rien, sur ces leviers, ne fait sortir la commune du décile à risque. "
+        "Son exposition tient à sa position, à son relief, à sa superficie. Le "
+        "risque est structurel, et l'absence de solution est ici la réponse.",
+    ], d.L, y, 30, 16, 1.28)
+    d.encart(s, "Un détail d'implémentation qui change tout\n"
+                "DiCE cherche par défaut à faire passer la probabilité sous "
+                "0,5. Or le score n'est pas calibré : 0,5 correspond à un "
+                "risque astronomique, et l'outil ne renvoyait jamais rien.\n"
+                "On a recentré la frontière sur le décile, par une "
+                "transformation strictement croissante qui laisse le classement "
+                "intact. La question devient « que faudrait-il pour sortir des "
+                "10 % les plus à risque », celle qui a un sens opérationnel.",
+             d.L, yy + 0.35, 30, 5.2, BLEU, 14)
+    d.encart(s, "Un contrefactuel n'est pas une recommandation. Rien ne "
+                "garantit qu'il soit réalisable, on ne convertit pas 40 % de "
+                "maquis en terres agricoles, ni que le lien soit causal : le "
+                "modèle a appris des corrélations, pas des mécanismes.",
+             d.L, yy + 5.95, 30, 2.8, ORANGE, 14)
+    d.notes(s, "Sur LIME, si la question vient : sur un modèle d'arbres il "
+               "approxime ce que TreeSHAP calcule exactement, donc il ne peut "
+               "pas faire mieux. Il redeviendrait le bon outil sur un modèle "
+               "qu'on ne peut pas ouvrir, une API ou un réseau profond.")
+
+    # ── les projections ─────────────────────────────────────────────────
+    s, y = d.page("Projeter jusqu'en 2100, et ce que cela ne veut pas dire",
                   "Trois scénarios GIEC, appliqués à l'aléa météo.")
     d._image(s, FIG / "projection-2050" /
              "02_le-risque-de-fond-en-2041-2055-a-vegetation-relief-et-preven.png",
              d.L, y, 18, 10.2)
     d.puces(s, [
         "**Ce qu'on projette**",
-        "Le FWI — seule quantité qui montre un signal, et seule que les "
-        "modèles climatiques savent fournir.",
+        "Le FWI, seule quantité qui montre un signal et seule que les modèles "
+        "climatiques savent fournir.",
         "**Ce qu'on ne projette pas**",
         "Le nombre de feux. La végétation, la prévention et les pratiques "
-        "agricoles sont supposées constantes : c'est une hypothèse, et elle "
-        "est fausse.",
-        "**Ce que « le 2 août 2050 » veut dire**",
-        "Pas une prévision météo : un 2 août ORDINAIRE sous le climat de 2050. "
-        "La forme de la saison vient des observations, seul son niveau est "
-        "décalé.",
-    ], 20.8, y, 11.3, 12.5, 1.2)
+        "agricoles sont supposées constantes, ce qui est une hypothèse et "
+        "elle est fausse.",
+        "**Ce que « le 2 août 2050 » signifie**",
+        "Pas une prévision météo, mais un 2 août ordinaire sous le climat de "
+        "2050. La forme de la saison vient des observations, seul son niveau "
+        "est décalé.",
+        "**Avant 2045, les scénarios sont indiscernables**",
+        "mesuré : en 2030, RCP 2.6 dépasse RCP 8.5 sur 59 % des communes. Ce "
+        "n'est pas une anomalie, c'est l'inertie du système climatique.",
+    ], 20.8, y, 11.3, 12.5, 1.16)
     d.notes(s, "L'application affiche cet avertissement à chaque date "
-               "postérieure à 2025. Le dire avant qu'on le demande.")
+               "postérieure à 2025, et grise la zone antérieure à 2045 sur les "
+               "graphiques de projection. Le dire avant qu'on le demande.")
 
-    # ── 27 ──────────────────────────────────────────────────────────────
-    d.section("06", "Rigueur",
-              "Les erreurs commises, et comment elles ont été trouvées")
-
-    # ── 28. le bug d'alignement ─────────────────────────────────────────
-    s, y = d.page("Le premier verdict du LSTM annonçait −97 %. Le vrai est −52 %.",
-                  "L'écart ne venait pas du modèle, mais de la façon de "
-                  "comparer deux fichiers.")
-    d._image(s, RACINE / "docs" / "img" / "alignement.png", d.L, y, 17, 9.2)
-    d.puces(s, [
-        "**La cause**",
-        "La requête d'assemblage n'a pas d'ORDER BY. L'ordre des 38 M lignes "
-        "que renvoie PostgreSQL dépend du plan d'exécution, et change d'une "
-        "exécution à l'autre.",
-        "**Pourquoi c'est invisible**",
-        "Les fichiers ne portaient que (score, cible). Même taille, même "
-        "nombre de feux, ordre différent : rien ne lève d'erreur.",
-        "**La parade**",
-        "Tout fichier porte désormais ses clés (code_insee, date) ; une "
-        "fonction d'alignement vérifie ; un test REFUSE un fichier sans clés.",
-    ], 19.5, y, 12.6, 12.5, 1.2)
-    d.notes(s, "Reproduit volontairement dans le notebook et dans "
-               "l'application : on permute les lignes, la PR-AUC tombe de "
-               "0,0085 à 0,0002 — exactement la ligne du hasard, avec les "
-               "mêmes valeurs dans le fichier.")
-
-    # ── 29. les autres erreurs ──────────────────────────────────────────
-    s, y = d.page("Les autres erreurs, trouvées et corrigées",
+    # ── les erreurs ─────────────────────────────────────────────────────
+    s, y = d.page("Les erreurs commises, et comment elles ont été trouvées",
                   "Sur un événement à 0,02 %, une erreur ne se manifeste "
-                  "jamais par une exception. Elle se manifeste par un chiffre "
-                  "plausible.")
-    d.tableau(s, ["L'erreur", "Le symptôme", "Ce qui l'a révélée"], [
-        ["ha et cible laissées dans les features du modèle de surface",
-         "R² = 0,994 et ROC-AUC = 1,0000",
-         "un score trop beau pour être vrai"],
-        ["interaction analysée sur l'échantillon du SOMMET",
-         "le signe de l'interaction s'inversait",
-         "biais de collision : sélectionner sur le score conditionne le résultat"],
-        ["moyenne climatologique non lissée",
-         "un dentelé de période 4 ans dans les séries annuelles",
-         "le 15 août tombe au jour 227 ou 228 selon les bissextiles"],
+                  "jamais par une exception, mais par un chiffre plausible.")
+    d._image(s, IMG / "alignement.png", d.L, y, 13.5, 8.2)
+    d.puces(s, [
+        "**Le premier verdict du LSTM annonçait −97 %. Le vrai est −52 %.**",
+        "La requête d'assemblage n'a pas d'ORDER BY : l'ordre des 38 M lignes "
+        "renvoyées par PostgreSQL dépend du plan d'exécution et change d'une "
+        "exécution à l'autre. Les fichiers ne portaient que (score, cible) : "
+        "même taille, même nombre de feux, ordre différent, aucune erreur "
+        "levée.",
+        "**La parade**",
+        "tout fichier porte désormais ses clés, une fonction d'alignement "
+        "vérifie, et un test refuse un fichier sans clés.",
+    ], 16.2, y, 15.9, 14, 1.2)
+    d.tableau(s, ["Les autres", "Le symptôme"], [
+        ["cible laissée dans les features du modèle de surface",
+         "R² = 0,994 et ROC-AUC = 1,0000"],
+        ["interaction analysée sur le sommet du classement",
+         "le signe s'inversait, biais de collision"],
         ["projection ancrée à k = 1,0 en 2025",
-         "la courbe plongeait au passage 2025 → 2026",
-         "le facteur observé de 2025 vaut déjà ~1,3"],
+         "la courbe plongeait au passage 2025 → 2026"],
         ["tendance du FWI écrite en dur dans l'application",
-         "+45 % affiché, +58 % réel",
-         "recalcul systématique à la source"],
-    ], d.L, y, 30, 9.2, larg=[10, 9, 11], taille=12)
-    d.encart(s, "Les seules défenses sont les invariants explicites et les "
-                "assertions qui échouent bruyamment. 50 tests tournent en "
-                "intégration continue à chaque commit.",
-             d.L, y + 10, 30, 2.4, VERT, 15)
-    d.notes(s, "Assumer ces erreurs plutôt que les cacher. Un jury retient "
-               "davantage un candidat qui sait où son travail a failli casser "
-               "qu'un candidat sans aspérité.")
+         "+45 % affiché, +58 % réel"],
+        ["PR-AUC et ROC-AUC affichées sans être sauvegardées",
+         "des chiffres cités sans artefact pour les soutenir"],
+    ], d.L, y + 9, 30, 5.4, larg=[16, 14], taille=12)
+    d.notes(s, "Le bug d'alignement est reproduit volontairement dans le "
+               "notebook et dans l'application : on permute les lignes, la "
+               "PR-AUC tombe de 0,0085 à 0,0002, exactement la ligne du "
+               "hasard, avec les mêmes valeurs dans le fichier.")
 
-    # ── 30. l'application ───────────────────────────────────────────────
-    s, y = d.page("L'application", "Cinq pages, déployée publiquement.")
-    d.tableau(s, ["Page", "Ce qu'elle montre"], [
-        ["Carte", "carte de chaleur nationale, 1973 → 2100, 3 scénarios GIEC, "
-                  "et un mode rétrospectif qui compare v3 et C sur le test"],
-        ["Commune", "fiche détaillée : décennies, projections, type de "
-                    "territoire"],
-        ["Les données", "les 4 sources, la tendance sur 53 ans, ADF et SARIMAX"],
-        ["Les modèles", "protocole, les 6 modèles et leurs IC, le LSTM, v3 "
-                        "contre C, la calibration, le bug d'alignement"],
-        ["Pourquoi un feu part", "SHAP, LIME et DiCE — et leur désaccord"],
-    ], d.L, y, 30, 7.6, larg=[7, 23])
-    d.encart(s, "Le mode rétrospectif REFUSE d'afficher le modèle v3 sur 20 "
-                "des 23 années qu'il pourrait techniquement couvrir — le train "
-                "(il a appris ces lignes), la validation (elle a servi à "
-                "choisir), l'avenir (pas d'historique) — et sait dire pourquoi "
-                "pour chacune.", d.L, y + 8.4, 30, 3.2, ROUGE, 15)
-    d._texte(s, "terre-vent-feu-eau-data.streamlit.app",
-             d.L, y + 12.1, 30, 1.4, 19, BLEU, True)
-    d.notes(s, "Faire la démonstration ici. Montrer d'abord la carte, puis le "
-               "basculement rétrospectif sur une date d'août, puis la page "
-               "Pourquoi.")
-
-    # ── 31. limites ─────────────────────────────────────────────────────
+    # ── les limites ─────────────────────────────────────────────────────
     s, y = d.page("Ce que le projet ne fait pas",
                   "Les limites qu'on connaît valent mieux que celles qu'on "
                   "découvre en soutenance.")
     d.puces(s, [
-        "**La surface brûlée n'est pas prédictible.**",
-        "R² de 0,14 — moins bon que d'annoncer toujours la médiane. Elle "
-        "dépend de ce qui se passe APRÈS le départ : vent, délai "
-        "d'intervention, relief.",
-        "**Et « sera-ce un grand feu ? » se prédit mal aussi.**",
+        "**La surface brûlée n'est pas prédictible**",
+        "R² de 0,14, moins bon que d'annoncer toujours la médiane. Elle dépend "
+        "de ce qui se passe après le départ : vent, délai d'intervention, "
+        "relief.",
+        "**« Sera-ce un grand feu » se prédit mal aussi**",
         f"lift de {D['taille']['lift_grand']:.1f}× seulement, contre "
         f"{mt['test']['lift']:.1f}× pour les départs. On lit parfois "
         f"« ROC-AUC 0,77 » : c'est exact, mais s'en servir après avoir "
         f"expliqué pourquoi la ROC-AUC flatte serait se contredire.",
-        "**Une commune-jour n'est pas un incendie.**",
-        "Un feu traversant cinq communes compte cinq fois.",
-        "**31 communes partagent une maille météo de 28 km.**",
-        "Le FWI porte le quand, la végétation porte le où. Conséquence "
-        "statistique : les intervalles naïfs sur les coefficients météo "
-        "seraient trop étroits.",
-        "**Le LSTM n'a pas reçu danger_effis.**",
-        "L'écart de 23,6 % est un majorant tant que cette asymétrie n'est pas "
-        "levée. C'est la première chose à refaire.",
+        "**Une commune-jour n'est pas un incendie**",
+        "un feu traversant cinq communes compte cinq fois.",
+        "**31 communes partagent une maille météo de 28 km**",
+        "conséquence statistique directe : les intervalles naïfs sur les "
+        "coefficients météo seraient trop étroits.",
+        "**Le LSTM n'a pas reçu danger_effis**",
+        "l'écart de 23,6 % reste un majorant tant que cette asymétrie n'est "
+        "pas levée. C'est la première chose à refaire.",
     ], d.L, y, 30, 15, 1.26)
-    d.notes(s, "Terminer là-dessus : montrer qu'on sait ce qui reste ouvert, "
-               "et dans quel ordre on s'y prendrait.")
+    d.notes(s, "Enchaîner directement sur la conclusion : ces limites "
+               "définissent la suite du travail, elles ne l'invalident pas.")
+
+    # ── l'application ───────────────────────────────────────────────────
+    s, y = d.page("L'application", "Cinq pages, déployée publiquement.")
+    d.tableau(s, ["Page", "Ce qu'elle montre"], [
+        ["Carte", "carte de chaleur nationale sur les 34 696 communes en "
+                  "aplat, 1973 → 2100, 3 scénarios GIEC, et un mode "
+                  "rétrospectif qui compare v3 et C sur le test"],
+        ["Commune", "fiche détaillée : décennies, projections à échelle fixe, "
+                    "type de territoire"],
+        ["Les données", "les 4 sources, la tendance sur 53 ans, ADF, ACF/PACF "
+                        "et SARIMAX"],
+        ["Les modèles", "protocole, les modèles et leurs intervalles, le LSTM, "
+                        "v3 contre C, la calibration, le bug d'alignement"],
+        ["Pourquoi un feu part", "SHAP, LIME et DiCE, et leur désaccord"],
+    ], d.L, y, 30, 7.6, larg=[7, 23])
+    d.encart(s, "Le mode rétrospectif refuse d'afficher le modèle v3 sur 20 "
+                "des 23 années qu'il pourrait techniquement couvrir : le train "
+                "parce qu'il a appris ces lignes, la validation parce qu'elle a "
+                "servi à choisir, l'avenir parce qu'il n'y a pas d'historique. "
+                "Et il sait dire laquelle des trois raisons s'applique.",
+             d.L, y + 8.4, 30, 3.2, ROUGE, 15)
+    d._texte(s, "terre-vent-feu-eau-data.streamlit.app",
+             d.L, y + 12.1, 30, 1.4, 19, BLEU, True)
+    d.notes(s, "Faire la démonstration ici : la carte d'abord, puis le "
+               "basculement rétrospectif sur une date d'août, puis la page "
+               "Pourquoi. Prévoir trois minutes.")
+
+    # ── conclusion ──────────────────────────────────────────────────────
+    s, y = d.page("Réponses aux quatre hypothèses")
+    d.tableau(s, ["", "Hypothèse", "Réponse", "Sur quelle mesure"], [
+        ["H1", "la météo seule ne suffit pas à localiser le risque",
+         "confirmée",
+         "danger EFFIS seul ×5, croisé au territoire ×42"],
+        ["H2", "le territoire apporte une information propre",
+         "confirmée",
+         "9 régions sur 9 en validation croisée spatiale, jusqu'à +137 %"],
+        ["H3", "une architecture séquentielle n'apporte rien de plus",
+         "confirmée",
+         "LSTM −23,6 % [−33,5 ; −17,3] à information égale ; PACF et ARIMA "
+         "concordants"],
+        ["H4", "le danger météo augmente de façon détectable",
+         "confirmée pour l'aléa,\nnon vérifiée pour les feux",
+         "FWI estival +62 % (p = 1e-4) ; départs +0 % non significatif"],
+    ], d.L, y, 30, 8, larg=[1.8, 10.2, 6, 12], taille=12.5)
+    d.encart(s, "La réponse à la question principale est positive, avec une "
+                "réserve explicite : on estime un risque relatif, pas une "
+                "probabilité absolue, et c'est pour cette raison que "
+                "l'application affiche un rang.",
+             d.L, y + 8.8, 30, 3, VERT, 16)
+    d._texte(s, "Merci. Questions ?", d.L, y + 12.4, 30, 1.6, 22, INK, True)
+    d.notes(s, "Terminer sur la réserve plutôt que sur la performance. Si une "
+               "seule chose doit rester : le modèle classe bien, il ne "
+               "quantifie pas.")
 
     chemin = d.enregistrer(SORTIE / "soutenance.pptx")
     n = len(d.p.slides._sldIdLst)
