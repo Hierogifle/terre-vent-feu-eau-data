@@ -231,7 +231,8 @@ def main() -> None:
     print(f"\n→ meilleur : {meilleur.modele}")
     print(f"  gain sur la référence saisonnière : "
           f"{100 * (1 - meilleur.mae / mae_naif):+.1f} % de MAE")
-    print(f"\n✅ series_adf.csv · series_sarimax.csv · series_acf_pacf.png")
+    print("\n✅ series_adf.csv · series_sarimax.csv · series_acf_pacf.csv "
+          "· series_acf_pacf.png")
 
 
 if __name__ == "__main__":
