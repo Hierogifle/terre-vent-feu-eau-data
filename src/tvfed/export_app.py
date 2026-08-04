@@ -612,7 +612,7 @@ def main() -> None:
     print(f"  v3 : {len(colonnes_v3)} features, ordre d'entraînement conservé")
 
     (APP / "meta.json").write_text(json.dumps({
-        "modele": "XGBoost C — physique pur, 41 features",
+        "modele": "XGBoost C · physique pure, 41 variables",
         "pourquoi": "seul modèle déployable : ne dépend d'aucune donnée "
                     "indisponible en temps réel. La BDIFF ne publie pas "
                     "l'année en cours.",

@@ -335,11 +335,11 @@ if retro:
         st.error(motif)
         st.stop()
 
-    st.markdown(f"## {N.date_fr(date)} — les deux modèles, "
-                f"et ce qui a réellement brûlé")
-    st.caption("Météo réellement observée ce jour-là, pour les deux modèles. "
-               "Comparer v3 sur météo réelle à C sur climatologie mesurerait "
-               "la différence de météo, pas de modèle.")
+    st.markdown(f"## {N.date_fr(date)} : les deux modèles, "
+                f"et ce qui a brûlé")
+    st.caption("Les deux modèles reçoivent la météo réellement observée ce "
+               "jour-là. Comparer v3 sur météo réelle à C sur climatologie "
+               "mesurerait la différence de météo, pas celle des modèles.")
 
     Rc = N.predire(date, nom="C", observee=True)
     Rv = N.predire(date, nom="v3", observee=True)
@@ -360,24 +360,23 @@ if retro:
         n = len(Rc)
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Communes ayant brûlé", f"{len(brules)}")
-        m2.metric("Rang médian — modèle C", f"{pc.median():,.0f}ᵉ"
+        m2.metric("Rang médian · modèle C", f"{pc.median():,.0f}ᵉ"
                   .replace(",", " "), f"sur {n:,}".replace(",", " "),
                   delta_color="off")
-        m3.metric("Rang médian — modèle v3", f"{pv.median():,.0f}ᵉ"
+        m3.metric("Rang médian · modèle v3", f"{pv.median():,.0f}ᵉ"
                   .replace(",", " "),
                   f"{100 * (pv.median() / pc.median() - 1):+.0f} % vs C",
                   delta_color="inverse")
         m4.metric("Dans le top 1 % (347 communes)",
                   f"C {100 * (pc <= n * .01).mean():.0f} %  ·  "
                   f"v3 {100 * (pv <= n * .01).mean():.0f} %")
-        st.caption("Un rang médian **plus bas** est meilleur : le feu était "
-                   "mieux classé. Sur une seule journée, ces chiffres sont "
-                   "très bruités — c'est une illustration, pas une mesure. "
-                   "La mesure est page *Les modèles*, sur 6 322 feux.")
+        st.caption("Un rang médian plus bas est meilleur : le feu était mieux "
+                   "classé. Sur une seule journée ces chiffres sont très "
+                   "bruités, c'est une illustration et non une mesure. La "
+                   "mesure est page *Les modèles*, sur 6 322 feux.")
     else:
-        st.info("Aucun départ de feu déclaré ce jour-là dans la BDIFF. "
-                "Choisissez une date d'été pour que la comparaison ait du "
-                "relief.")
+        st.info("Aucun départ de feu déclaré ce jour-là dans la BDIFF. Une "
+                "date d'été donnera davantage à comparer.")
 
     # ── les deux cartes ─────────────────────────────────────────────────
     g, d_ = st.columns(2)
@@ -397,7 +396,7 @@ if retro:
 
     t1, t2 = st.columns(2)
     with t1:
-        st.markdown("**v3 alerte, C non** — l'historique parle")
+        st.markdown("**v3 alerte, C non** · ce que dit l'historique")
         h = J.nlargest(8, "ecart")[
             ["nom", "dep_nom", "pos_c", "pos_v3", "feux_commune_365j",
              "jours_depuis_dernier_feu", "a_brule"]]
@@ -407,7 +406,7 @@ if retro:
             "jours_depuis_dernier_feu": "j. depuis",
             "a_brule": "a brûlé"}), width="stretch", hide_index=True)
     with t2:
-        st.markdown("**C alerte, v3 non** — le territoire parle")
+        st.markdown("**C alerte, v3 non** · ce que dit le territoire")
         b = J.nsmallest(8, "ecart")[
             ["nom", "dep_nom", "pos_c", "pos_v3", "fwi", "part_maquis",
              "a_brule"]]
@@ -418,15 +417,15 @@ if retro:
             width="stretch", hide_index=True)
 
     st.info(f"""
-**Ce que ce tableau montre.** À gauche, v3 place haut des communes que C ignore
-— regardez les colonnes `feux 365 j` et `j. depuis` : v3 dit *« ça a brûlé ici
-récemment »*. À droite, C place haut des communes que v3 ignore, sur la
-végétation et la météo.
+À gauche, v3 place haut des communes que C ignore. Les colonnes `feux 365 j`
+et `j. depuis` disent pourquoi : il y a eu un feu ici récemment. À droite, C
+place haut des communes que v3 ignore, sur la végétation et la météo.
 
-Les deux ont raison à leur manière. Mais **la colonne de gauche est
-inaccessible en temps réel** : le {date.strftime('%d/%m/%Y')}, la BDIFF
-n'aurait publié aucun feu de {date.year}. C'est tout l'argument, et c'est
-pourquoi l'application tourne sur C.
+Les deux lectures se défendent. La différence est ailleurs : l'information de
+la colonne de gauche n'existe pas en temps réel. Le
+{date.strftime('%d/%m/%Y')}, la BDIFF n'aurait publié aucun feu de
+{date.year}. C'est la raison pour laquelle l'application tourne sur le
+modèle C.
 """)
     st.stop()
 
@@ -472,10 +471,10 @@ if date_b is not None:
 # ── une date ────────────────────────────────────────────────────────────
 if projete:
     st.warning(
-        f"**{N.date_fr(date)} n'est pas une prévision météo.** Personne ne "
+        f"Le {N.date_fr(date)} n'est pas une prévision météo : personne ne "
         f"connaît le temps qu'il fera ce jour-là. La carte montre ce que "
         f"vaudrait un {date.day} {MOIS[date.month - 1]} ordinaire sous le "
-        f"climat de {date.year} : le cycle saisonnier vient des observations "
+        f"climat de {date.year}. Le cycle saisonnier vient des observations "
         f"2006-2019, seul son niveau est décalé par le réchauffement projeté "
         f"({scenario.upper().replace('_', '.')}).")
 
@@ -518,7 +517,13 @@ with gauche:
 
 with droite:
     st.markdown("##### Où regarder ce jour-là")
-    top = R.nlargest(10, "score")
+    # ⚠️ CE PANNEAU DOIT SUIVRE LA COUCHE AFFICHÉE.
+    # Il classait toujours sur le score brut, y compris quand la carte
+    # peignait le FWI ou le risque par km² : les dix noms listés n'étaient
+    # alors pas les dix communes les plus sombres, ce que la carte
+    # contredisait à l'écran. Même défaut que celui corrigé sur les
+    # indicateurs. On trie sur la grandeur réellement peinte.
+    top = R.assign(_poids=poids_de(R, couche)).nlargest(10, "_poids")
     for i, (_, t) in enumerate(top.iterrows(), 1):
         cl = int(t.danger_effis)
         st.markdown(
@@ -538,19 +543,18 @@ if couche.startswith("Risque par"):
     st.info("""
 Cette vue divise le score par la surface de la commune.
 
-Le modèle prédit « cette commune aura-t-elle au moins un feu aujourd'hui ».
+Le modèle répond à « cette commune aura-t-elle au moins un feu aujourd'hui ».
 Une commune vaste a mécaniquement plus de chances d'en contenir un : la
-corrélation entre le score et la superficie vaut 0,55. Fontainebleau,
-172 km² de forêt, ressort donc très au-dessus de Melun et Barbizon, qui
+corrélation entre le score et la superficie vaut 0,55. Fontainebleau, avec ses
+172 km² de forêt, ressort donc bien au-dessus de Melun et Barbizon, qui
 partagent pourtant sa météo et son FWI de 5,1.
 
-L'écart entre les deux cartes est plus discret qu'on ne l'imagine : la
-corrélation de rang entre le score et le score par km² vaut 0,835. Le
-classement bouge, mais il ne se retourne pas.
+L'écart entre les deux cartes reste limité : la corrélation de rang entre le
+score et le score par km² vaut 0,835. Le classement bouge sans se retourner.
 
 Dans les données observées, les plus grandes communes brûlent 20 fois plus
 souvent que les plus petites, mais seulement 3 fois plus par km². Cette vue
-répond au « le sol est-il dangereux ici », l'autre au « quelle commune
+répond à « le sol est-il dangereux ici », l'autre à « quelle commune
 surveiller ».
 """)
 

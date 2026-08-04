@@ -309,20 +309,20 @@ def modele(nom: str = "C"):
 
 MOTIFS = {
     "train": (
-        "**{a}-{b} — le modèle v3 a appris ces années.** Afficher son score "
-        "ici montrerait ce qu'il a mémorisé, pas ce qu'il sait prédire. "
-        "Les cartes paraîtraient excellentes, pour la pire des raisons."),
+        "**{a}-{b} : le modèle v3 a appris ces années.** Afficher son score "
+        "ici montrerait ce qu'il a mémorisé, pas ce qu'il sait prédire. Les "
+        "cartes paraîtraient excellentes, pour la mauvaise raison."),
     "val": (
-        "**{a}-{b} — la validation.** Elle a servi à choisir les "
+        "**{a}-{b} : la validation.** Elle a servi à choisir les "
         "hyperparamètres par Optuna, à sélectionner le modèle, à ajuster la "
         "calibration et à faire tourner le bootstrap apparié. Un score "
-        "affiché ici serait optimiste pour une raison invisible à l'œil."),
+        "affiché ici serait optimiste sans que rien ne le montre."),
     "avenir": (
-        "**Au-delà de {b} — le modèle v3 est impossible.** Il a besoin des "
+        "**Au-delà de {b} : le modèle v3 est impossible.** Il a besoin des "
         "feux des 365 derniers jours ; la BDIFF ne publie pas l'année en "
         "cours, et personne ne connaîtra jamais les feux de 2049."),
     "avant": (
-        "**Avant {a} — pas d'historique exploitable.** Le v3 a besoin de "
+        "**Avant {a} : pas d'historique exploitable.** Le v3 a besoin de "
         "365 jours de feux antérieurs, et la BDIFF n'est pas homogène avant "
         "2006."),
 }
@@ -394,7 +394,7 @@ def meteo_du_jour(d: pd.Timestamp, scenario: str = "rcp8_5",
         j = m[m.date == d].copy()
         if j.empty:
             raise ValueError(
-                f"la météo observée n'est exportée que pour 2023-2025 — "
+                f"la météo observée n'est exportée que pour 2023-2025, et "
                 f"{d.date()} est hors de cette fenêtre")
         j["danger_effis"] = np.digitize(j.fwi, SEUILS).astype(int)
         return j.drop(columns=["date"])
@@ -623,7 +623,7 @@ def entete():
         f"padding:.6rem 1rem;margin-bottom:1rem'>"
         f"<b style='color:{INK}'>Risque de feu de forêt · France</b><br>"
         f"<span style='color:{MUTED};font-size:.88rem'>"
-        f"{mt['modele']} — {mt['test']['lift']:.0f}× le hasard, mesuré sur "
+        f"{mt['modele']} · {mt['test']['lift']:.0f}× le hasard, mesuré sur "
         f"{nb(mt['test']['feux'])} feux de {mt['test']['periode']}"
         f"</span></div>",
         unsafe_allow_html=True)
