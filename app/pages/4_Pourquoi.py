@@ -411,10 +411,12 @@ traduise en décision.
         seuil = float(R.score.quantile(.90))
         F = fond().copy()
         cible = "y" if "y" in F.columns else F.columns[-1]
+
         donnees = dice_ml.Data(dataframe=F, continuous_features=FEATURES,
                                outcome_name=cible)
-        mod = dice_ml.Model(model=SeuilPercentile(N.modele("C"), seuil),
-                            backend="sklearn")
+        PARTS = [f for f in FEATURES if f.startswith("part_")]
+        enveloppe = SeuilPercentile(N.modele("C"), seuil)
+        mod = dice_ml.Model(model=enveloppe, backend="sklearn")
         moteur = Dice(donnees, mod, method="random")
 
         # ⚠️ Le sens de la question dépend d'où se trouve la commune. Pour
@@ -444,7 +446,7 @@ traduise en décision.
                  "Un contrefactuel n'a de sens que sur des leviers réels.")
 
         if st.button("Chercher les contrefactuels", type="primary"):
-            res = None
+            res, ecretes = None, 0
             with st.spinner("recherche…"):
                 try:
                     cf = moteur.generate_counterfactuals(
@@ -453,18 +455,59 @@ traduise en décision.
                     res = cf.cf_examples_list[0].final_cfs_df
                 except UserConfigValidationException:
                     res = None
+
+            # ⚠️ DiCE RENVOIE DES PROPORTIONS SUPÉRIEURES À 100 %.
+            # Mesuré sur L'Estréchure : 3 scénarios sur 5 portaient
+            # `part_agricole` à 110 % du territoire communal. La bibliothèque
+            # connaît pourtant le domaine [0 ; 1] — elle quantifie après
+            # échantillonnage et l'arrondi déborde d'un cran. Ni
+            # `permitted_range` sur Data ni sur generate_counterfactuals ne
+            # l'en empêchent.
+            #
+            # On écrête, PUIS on revérifie avec le modèle : un point écrêté
+            # n'est plus celui que DiCE a validé, et l'afficher sans contrôle
+            # reviendrait à montrer un faux contrefactuel. Mesuré : les cinq
+            # scénarios de L'Estréchure basculent encore après écrêtage.
+            proposes = 0
+            if res is not None and len(res):
+                proposes = len(res)          # ce que DiCE a rendu, avant tri
+                classe = int(enveloppe.predict(x[FEATURES].astype(float))[0])
+                res = res.copy()
+                hors = (res[PARTS].lt(0) | res[PARTS].gt(1)).any(axis=1)
+                ecretes = int(hors.sum())
+                res[PARTS] = res[PARTS].clip(0.0, 1.0)
+                res = res[enveloppe.predict(
+                    res[FEATURES].astype(float)) != classe]
             if res is None or not len(res):
+                # ⚠️ DIRE POURQUOI, PAS SEULEMENT QUE ÇA A ÉCHOUÉ.
+                # Le message se contentait d'annoncer l'absence de solution,
+                # ce qui laisse croire à une panne. Trois quantités mesurables
+                # expliquent l'échec ; on les affiche.
+                ecart = ligne.score / seuil if dedans else seuil / max(ligne.score, 1e-9)
+                # `part_combustible` est un AGRÉGAT qui recoupe maquis, forêt
+                # et landes : l'inclure dans la somme double-compte et donne
+                # des « 156 % du territoire ». On l'exclut.
+                dispo = sum(float(ligne[f]) for f in (modifiables or [])
+                            if f.startswith("part_") and f != "part_combustible")
                 st.error(f"""
-Aucun contrefactuel trouvé. C'est une réponse, pas une panne.
+Aucun contrefactuel trouvé, et ce n'est pas une panne. Trois quantités
+expliquent l'échec, toutes lisibles ici.
 
-Sur les leviers autorisés, rien ne fait
-{'sortir' if dedans else 'entrer'} {sel.nom}
-{'du' if dedans else 'dans le'} décile à risque. Son exposition ne tient pas à
-ce qu'on peut modifier : elle tient à sa position, à son relief, à sa
-superficie.
+**L'écart à franchir.** {sel.nom} est à {N.dec(ecart, 1)} fois le seuil du
+décile. Plus ce rapport est grand, moins la végétation suffit.
 
-Élargir la liste des variables montre ce qu'il faudrait changer pour y
-parvenir, et à quel point ce serait hors de portée.
+**Les leviers disponibles.** Les variables autorisées ne couvrent que
+{N.pct(dispo, 0)} du territoire communal. On ne peut pas retirer ce qui n'est
+pas là.
+
+**Ce qu'on n'a pas le droit de toucher.** Le FWI du jour vaut
+{N.dec(ligne.fwi)} et la distance à la côte
+{N.dec(ligne.distance_cote_km, 0)} km. Ces variables pèsent lourd et ne
+figurent pas dans les leviers, par construction.
+
+Pour voir DiCE aboutir, cherchez une commune **proche du seuil** et bien
+pourvue en forêt : au 12 juillet 2024, Vion en Ardèche, Cournanel dans l'Aude
+ou L'Estréchure dans le Gard renvoient chacune cinq scénarios.
 """)
             else:
                 cols = modifiables or FEATURES
@@ -476,9 +519,14 @@ parvenir, et à quel point ce serait hors de portée.
                 st.dataframe(
                     aff.rename(columns={f: joli(f) for f in cols}),
                     width="stretch", hide_index=True)
-                st.caption("Chaque ligne est un scénario alternatif : la "
-                           "variation à appliquer pour que la commune sorte "
-                           "du décile le plus à risque.")
+                st.caption(
+                    "Chaque ligne est un scénario alternatif : la variation à "
+                    "appliquer pour que la commune sorte du décile le plus à "
+                    "risque."
+                    + (f" {ecretes} des {proposes} scénarios rendus par DiCE "
+                       f"portaient une part au-delà de 100 % du territoire : "
+                       f"ramenés à 100 %, puis revérifiés comme basculant "
+                       f"toujours." if ecretes else ""))
         st.warning("""
 Un contrefactuel n'est pas une recommandation. DiCE trouve un point proche que
 le modèle classe différemment, sans garantir qu'il soit réalisable : on ne
@@ -486,8 +534,12 @@ convertit pas 40 % de maquis en terres agricoles. Rien ne garantit non plus que
 le lien soit causal, le modèle ayant appris des corrélations sur 2006-2019 et
 non des mécanismes.
 
-C'est la raison pour laquelle la liste des variables modifiables est un choix
-explicite laissé à l'utilisateur, et non un réglage caché.
+Une limite plus technique, visible dans les tableaux ci-dessus : DiCE fait
+varier **chaque part indépendamment**, sans savoir qu'elles décrivent le même
+territoire. Un scénario peut donc retirer 48 points de forêt et ajouter
+99 points de terres agricoles sans que la somme reste cohérente. Les parts
+sont désormais bornées à 100 %, mais leur cohérence mutuelle n'est pas
+imposée. Ces scénarios se lisent comme des directions, pas comme des plans.
 """)
     except ImportError:
         st.warning("`dice-ml` n'est pas installé : `uv pip install dice-ml`.")
