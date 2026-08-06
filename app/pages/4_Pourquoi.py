@@ -418,6 +418,46 @@ traduise en décision.
         enveloppe = SeuilPercentile(N.modele("C"), seuil)
         mod = dice_ml.Model(model=enveloppe, backend="sklearn")
         moteur = Dice(donnees, mod, method="random")
+        BORNES = {f: (float(F[f].min()), float(F[f].max())) for f in FEATURES}
+
+        def atteignable(lignes, leviers, baisser):
+            """Un score favorable ATTEIGNABLE, pas le meilleur possible.
+
+            On pousse chaque levier autorisé vers l'extrémité de son domaine
+            qui déplace le score dans le sens voulu, puis on évalue le point
+            combinant tous ces choix. `baisser` dit dans quel sens : vrai pour
+            faire sortir du décile, faux pour l'y faire entrer.
+
+            ⚠️ LA SONDE EST UNE BORNE, ET ELLE NE VAUT QUE DANS UN SENS.
+            L'optimisation se fait levier par levier ; les variables
+            interagissent, donc une COMBINAISON que cette recherche gloutonne
+            ne visite pas peut faire mieux. Mesuré sur Ambres : la sonde
+            plafonne à 0,0405 pour un seuil de 0,0688, et DiCE trouve pourtant
+            cinq contrefactuels. Augmenter la résolution n'y change rien, le
+            défaut est dans le principe, pas dans le pas d'échantillonnage.
+
+            D'où l'asymétrie à respecter dans l'interface :
+              franchit      → une solution EXISTE, on en tient une explicite ;
+              ne franchit pas → probablement aucune, mais sans garantie.
+            La sonde ne doit donc jamais empêcher de lancer la recherche.
+
+            Vectorisé : `lignes` peut porter une commune comme les 34 734.
+            """
+            m = N.modele("C")
+            base = lignes[FEATURES].astype(float).reset_index(drop=True)
+            best = m.predict_proba(base)[:, 1]
+            combine = base.copy()
+            for f in leviers:
+                lo, hi = BORNES[f]
+                for v in (lo, hi):
+                    essai = base.copy()
+                    essai[f] = v
+                    p = m.predict_proba(essai)[:, 1]
+                    gagne = (p < best) if baisser else (p > best)
+                    combine.loc[gagne, f] = v
+                    best = np.where(gagne, p, best)
+            p = m.predict_proba(combine)[:, 1]
+            return np.minimum(best, p) if baisser else np.maximum(best, p)
 
         # ⚠️ Le sens de la question dépend d'où se trouve la commune. Pour
         # une commune du décile, on cherche à en SORTIR ; pour une autre, ce
@@ -445,7 +485,62 @@ traduise en décision.
             help="Le débroussaillement se décide ; la distance à la côte non. "
                  "Un contrefactuel n'a de sens que sur des leviers réels.")
 
-        if st.button("Chercher les contrefactuels", type="primary"):
+        # ── la sonde, AVANT de lancer quoi que ce soit ──────────────────
+        # DiCE met plusieurs secondes puis renvoie parfois rien. On sait
+        # d'avance si la recherche a une chance : il suffit de regarder si
+        # l'extrême atteignable franchit le seuil.
+        extreme = float(atteignable(pd.DataFrame([ligne]), modifiables,
+                                    baisser=dedans)[0]) if modifiables else \
+            float(ligne.score)
+        franchit = (extreme < seuil) if dedans else (extreme >= seuil)
+
+        sens = "descendrait" if dedans else "monterait"
+        cote = "au-dessus du" if dedans else "en dessous du"
+        if franchit:
+            st.success(f"Une solution existe : en poussant les leviers "
+                       f"autorisés, le score {sens} à {N.dec(extreme, 4)}, de "
+                       f"l'autre côté du seuil de {N.dec(seuil, 4)}. DiCE va "
+                       f"en chercher des variantes proches de l'état actuel.")
+        else:
+            st.warning(f"Les leviers autorisés semblent insuffisants : en les "
+                       f"poussant un par un, le score {sens} au mieux à "
+                       f"{N.dec(extreme, 4)}, soit {cote} seuil de "
+                       f"{N.dec(seuil, 4)}.\n\n"
+                       f"Ce n'est pas une certitude. Cette sonde teste les "
+                       f"leviers isolément quand DiCE explore leurs "
+                       f"combinaisons, et il lui arrive de trouver ce qu'elle "
+                       f"manque. La recherche reste donc possible.")
+            if st.button("Trouver une commune où la recherche aboutit"):
+                cand = R[["code_insee", "nom", "dep_nom", "score"]].copy()
+                lim = atteignable(R, modifiables, baisser=True)
+                cand["ok"] = lim < seuil
+                # On préfère une commune DANS le décile : « comment en
+                # sortir » est la question la plus parlante.
+                bons = cand[cand.ok & (cand.score >= seuil)]
+                if not len(bons):
+                    bons = cand[cand.ok]
+                if len(bons):
+                    # ⚠️ PRENDRE LA MÉDIANE, PAS LE SCORE LE PLUS HAUT.
+                    # La sonde démontre qu'une solution existe quelque part ;
+                    # DiCE, lui, cherche PRÈS du point de départ. Mesuré :
+                    # Fontan, score 0,69 et sortie démontrée, rend zéro
+                    # scénario, quand la commune médiane des candidates en
+                    # rend cinq. Une commune trop enfoncée dans le décile est
+                    # un mauvais candidat même quand une issue existe.
+                    bons = bons.sort_values("score")
+                    st.session_state["q_expl"] = \
+                        bons.iloc[len(bons) // 2].nom
+                    st.rerun()
+                else:
+                    st.info("Aucune commune ne convient pour cette date et ces "
+                            "leviers. Essayez une date d'été.")
+
+        # La sonde conseille, elle n'interdit pas : elle sous-estime ce qui est
+        # atteignable, et bloquer le bouton priverait l'utilisateur des cas
+        # qu'elle manque.
+        if st.button("Chercher les contrefactuels" if franchit
+                     else "Chercher quand même",
+                     type="primary" if franchit else "secondary"):
             res, ecretes = None, 0
             with st.spinner("recherche…"):
                 try:
@@ -483,31 +578,61 @@ traduise en décision.
                 # Le message se contentait d'annoncer l'absence de solution,
                 # ce qui laisse croire à une panne. Trois quantités mesurables
                 # expliquent l'échec ; on les affiche.
-                ecart = ligne.score / seuil if dedans else seuil / max(ligne.score, 1e-9)
-                # `part_combustible` est un AGRÉGAT qui recoupe maquis, forêt
-                # et landes : l'inclure dans la somme double-compte et donne
-                # des « 156 % du territoire ». On l'exclut.
-                dispo = sum(float(ligne[f]) for f in (modifiables or [])
-                            if f.startswith("part_") and f != "part_combustible")
+                # ⚠️ LES TROIS QUANTITÉS S'ÉNONCENT À L'ENVERS SELON LE SENS.
+                # Une version affichait « Saint-Trivier est à 52,5 fois le
+                # seuil » pour une commune située cinquante fois EN DESSOUS,
+                # et présentait 93 % de couverture comme une pénurie. On
+                # sépare franchement les deux formulations.
+                # `part_combustible` est exclu des sommes : c'est un agrégat
+                # qui recoupe maquis, forêt et landes, et l'inclure donnait
+                # des « 156 % du territoire ».
+                vg = [f for f in (modifiables or [])
+                      if f.startswith("part_") and f != "part_combustible"]
+                if dedans:
+                    ecart = ligne.score / seuil
+                    phrase_ecart = (
+                        f"{sel.nom} est à **{N.dec(ecart, 1)} fois** le seuil "
+                        f"du décile. Il faut faire descendre son score, et "
+                        f"plus ce rapport est grand, moins la végétation y "
+                        f"suffit.")
+                    stock = sum(float(ligne[f]) for f in vg)
+                    phrase_leviers = (
+                        f"On ne peut retirer que ce qui est là : les variables "
+                        f"autorisées représentent **{N.pct(stock, 0)}** du "
+                        f"territoire communal.")
+                    phrase_verrou = (
+                        f"Le FWI du jour vaut **{N.dec(ligne.fwi)}** "
+                        f"({N.CLASSES[int(ligne.danger_effis)].lower()}) et la "
+                        f"commune est à {N.dec(ligne.distance_cote_km, 0)} km "
+                        f"de la côte. Ces deux variables maintiennent le score "
+                        f"haut et ne figurent pas dans les leviers.")
+                else:
+                    ecart = seuil / max(ligne.score, 1e-9)
+                    phrase_ecart = (
+                        f"{sel.nom} est **{N.dec(ecart, 1)} fois en dessous** "
+                        f"du seuil. Il faudrait faire monter son score, ce qui "
+                        f"est d'autant plus dur que l'écart est grand.")
+                    marge = sum(1.0 - float(ligne[f]) for f in vg)
+                    phrase_leviers = (
+                        f"On ne peut ajouter que là où il reste de la place : "
+                        f"la marge cumulée avant saturation des variables "
+                        f"autorisées vaut **{N.pct(marge / max(len(vg), 1), 0)}** "
+                        f"en moyenne par variable.")
+                    phrase_verrou = (
+                        f"Surtout, le FWI du jour vaut **{N.dec(ligne.fwi)}** "
+                        f"({N.CLASSES[int(ligne.danger_effis)].lower()}). "
+                        f"Aucune plantation ne fait entrer une commune dans le "
+                        f"décile un jour où sa météo est clémente : c'est le "
+                        f"vrai verrou ici.")
                 st.error(f"""
 Aucun contrefactuel trouvé, et ce n'est pas une panne. Trois quantités
-expliquent l'échec, toutes lisibles ici.
+l'expliquent.
 
-**L'écart à franchir.** {sel.nom} est à {N.dec(ecart, 1)} fois le seuil du
-décile. Plus ce rapport est grand, moins la végétation suffit.
+**L'écart à franchir.** {phrase_ecart}
 
-**Les leviers disponibles.** Les variables autorisées ne couvrent que
-{N.pct(dispo, 0)} du territoire communal. On ne peut pas retirer ce qui n'est
-pas là.
+**Les leviers disponibles.** {phrase_leviers}
 
-**Ce qu'on n'a pas le droit de toucher.** Le FWI du jour vaut
-{N.dec(ligne.fwi)} et la distance à la côte
-{N.dec(ligne.distance_cote_km, 0)} km. Ces variables pèsent lourd et ne
-figurent pas dans les leviers, par construction.
-
-Pour voir DiCE aboutir, cherchez une commune **proche du seuil** et bien
-pourvue en forêt : au 12 juillet 2024, Vion en Ardèche, Cournanel dans l'Aude
-ou L'Estréchure dans le Gard renvoient chacune cinq scénarios.
+**Ce qu'on s'interdit de toucher.** {phrase_verrou}
 """)
             else:
                 cols = modifiables or FEATURES
