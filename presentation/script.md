@@ -116,6 +116,10 @@ fois en écrivant l'application.
 > C'est cet écart que le projet cherche à combler. La météo dit quand, elle
 > ne dit pas où. »
 
+**Montrer la grille en parlant** : chaque carreau bleu de la figure est une
+cellule météo, il y en a 1 131 sur la France. C'est la résolution à laquelle
+le danger est publié aujourd'hui, et elle se voit.
+
 **Ne pas dire** que le FWI serait insuffisant ou dépassé. Il est l'entrée
 principale du modèle, et les baselines montrent qu'il porte un signal réel.
 L'apport est une résolution spatiale, pas une correction.
@@ -443,15 +447,22 @@ annonçait −97 %. Il était faux, pour une raison décrite à la diapo 34.
 
 **À dire** (2 min) :
 
+Commenter en montrant la figure : les trois courbes sont le cœur de
+l'argument, et elles se lisent en dix secondes.
+
 > « L'explication est physique, et c'est ce qui rend le résultat intéressant.
 >
-> Un LSTM sert quand l'ordre de la séquence porte une information qu'aucun
-> résumé ne capture. Ici, ce résumé existe déjà. Les indices DC, DMC et BUI
-> du système canadien sont des états récursifs : le Drought Code est une
-> moyenne exponentielle de la météo passée, de constante de temps 52 jours,
-> le Duff Moisture Code 15 jours. C'est la forme d'une cellule récurrente, à
-> ceci près que ses coefficients ont été calibrés par cinquante ans de
-> science du feu plutôt qu'estimés sur 9 176 exemples positifs.
+> Regardez ces trois courbes. En haut le FFMC, qui décrit 1 à 2 cm de litière
+> fine : il monte et descend au jour le jour. Au milieu le DMC, sur 5 à
+> 10 cm, déjà plus lisse. En bas le DC, sur 10 à 20 cm de profondeur : une
+> seule grande vague qui monte tout l'été et redescend à l'automne.
+>
+> Ce sont trois mémoires de longueurs différentes, et elles sont déjà
+> calculées. Le Drought Code est une moyenne exponentielle de la météo passée
+> avec une constante de temps de 52 jours, le Duff Moisture Code de 15 jours.
+> C'est la forme d'une cellule récurrente, à ceci près que ses coefficients
+> ont été calibrés par cinquante ans de science du feu plutôt qu'estimés sur
+> 9 176 exemples positifs.
 >
 > Le CEMS livre déjà l'état caché que le LSTM devrait réapprendre.
 >
@@ -493,6 +504,11 @@ la première chose que je reprendrais.
 > dont la mémoire utile vaut trois jours a oublié son point de départ et
 > converge vers la moyenne. Ajouter le FWI fait tomber l'erreur de 37 %. La
 > prévisibilité du feu est dans la météo, pas dans son propre passé. »
+
+**Les corrélogrammes, à droite** : en haut la série brute, où l'ACF ne montre
+que le cycle annuel parce que tout est corrélé à tout pendant l'été. En bas,
+après retrait de la saisonnalité par termes de Fourier, les seules courbes
+exploitables pour choisir les ordres.
 
 **Pourquoi ce détour n'est pas décoratif** : il montre que la conclusion sur
 le LSTM ne repose pas sur une seule expérience, mais sur trois familles de
