@@ -502,7 +502,7 @@ def construire(D: dict) -> str:
       <a href="{DEPOT}">Code source</a> ·
       <a href="{APPLI}">Application</a> ·
       <a href="{DEPOT}/blob/main/docs/series-temporelles.md">Cours ACF / PACF / SARIMAX</a> ·
-      <a href="{DEPOT}/blob/main/presentation/script.md">Script de soutenance</a>
+      <a href="{DEPOT}/blob/main/presentation/script.md">Rapport final</a>
     </p>
     <p>
       Sources ouvertes : Copernicus EMS, IGN/BDIFF, CORINE Land Cover, INSEE.
