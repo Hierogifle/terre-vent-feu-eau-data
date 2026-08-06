@@ -1259,10 +1259,31 @@ def main() -> None:
                 "probabilité absolue, et c'est pour cette raison que "
                 "l'application affiche un rang.",
              d.L, y + 8.8, 30, 3, VERT, 16)
-    d._texte(s, "Merci. Questions ?", d.L, y + 12.4, 30, 1.6, 22, INK, True)
     d.notes(s, "Terminer sur la réserve plutôt que sur la performance. Si une "
                "seule chose doit rester : le modèle classe bien, il ne "
                "quantifie pas.")
+
+    # ── clôture ─────────────────────────────────────────────────────────
+    # Une vraie diapositive de fin, et pas une ligne « Merci » ajoutée sous
+    # un tableau : c'est l'image qui reste à l'écran pendant les questions,
+    # donc elle porte la carte et les trois adresses.
+    s = d._vide(INK)
+    d._texte(s, "Merci", d.L, 5.6, 18, 3, 54, FOND, True, 1.05)
+    d._texte(s, "Le modèle classe bien.\nIl ne quantifie pas.",
+             d.L, 10.2, 18, 3, 20, GRIS, interligne=1.4)
+    d._filet(s, 14.6, ROUGE, x=d.L, w=3.2)
+    d._texte(s, "L'application  ·  terre-vent-feu-eau-data.streamlit.app\n"
+                "La présentation  ·  hierogifle.github.io/terre-vent-feu-eau-data\n"
+                "Le code  ·  github.com/Hierogifle/terre-vent-feu-eau-data",
+             d.L, 15.4, 20, 3, 13, GRIS, interligne=1.5)
+    d._texte(s, "Romuald Courtois  ·  M1 Data / IA  ·  La Plateforme_",
+             20.5, 17.4, 12, 1, 12, MUTED, aligne=None)
+    d._image(s, IMG / "carte.png", 21.5, 2.6, 10.5, 12)
+    d.notes(s, "Laisser cette diapositive affichée pendant les questions : la "
+               "carte donne au jury quelque chose à regarder, et les trois "
+               "adresses sont lisibles depuis la salle.\n\n"
+               "Si on demande par où commencer : la vitrine GitHub Pages, "
+               "elle renvoie vers les deux autres.")
 
     chemin = d.enregistrer(SORTIE / "soutenance.pptx")
     n = len(d.p.slides._sldIdLst)
