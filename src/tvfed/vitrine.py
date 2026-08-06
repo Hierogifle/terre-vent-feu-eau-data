@@ -499,10 +499,11 @@ def construire(D: dict) -> str:
 
   <footer>
     <p>
-      <a href="{DEPOT}">Code source</a> ·
-      <a href="{APPLI}">Application</a> ·
+      <a href="{DEPOT}/blob/main/docs/rapport-scientifique.md">Rapport scientifique</a> ·
+      <a href="{DEPOT}/blob/main/presentation/script.md">Aide-mémoire</a> ·
       <a href="{DEPOT}/blob/main/docs/series-temporelles.md">Cours ACF / PACF / SARIMAX</a> ·
-      <a href="{DEPOT}/blob/main/presentation/script.md">Rapport final</a>
+      <a href="{APPLI}">Application</a> ·
+      <a href="{DEPOT}">Code source</a>
     </p>
     <p>
       Sources ouvertes : Copernicus EMS, IGN/BDIFF, CORINE Land Cover, INSEE.
