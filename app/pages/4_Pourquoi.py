@@ -645,22 +645,60 @@ l'expliquent.
 """)
             else:
                 cols = modifiables or FEATURES
-                delta = res[cols].astype(float).reset_index(drop=True) \
-                    - x[cols].to_numpy()
+                # ⚠️ UN TABLEAU DE −0,4812 NE DIT RIEN À PERSONNE.
+                # La sortie brute de DiCE était affichée telle quelle, en
+                # fractions signées à quatre décimales. On la traduit en
+                # phrases, et le tableau donne l'avant et l'après en
+                # pourcentages du territoire plutôt que des variations.
                 st.markdown("##### Ce qu'il faudrait changer")
-                aff = delta.round(4)
-                aff.insert(0, "scénario", [f"#{i + 1}" for i in range(len(aff))])
-                st.dataframe(
-                    aff.rename(columns={f: joli(f) for f in cols}),
-                    width="stretch", hide_index=True)
+                avant = x[cols].iloc[0].astype(float)
+                apres = res[cols].astype(float).reset_index(drop=True)
+
+                def raconte(ligne_apres):
+                    bouts = []
+                    for f in cols:
+                        a, b = float(avant[f]), float(ligne_apres[f])
+                        if abs(b - a) < 0.005:      # moins d'un demi-point
+                            continue
+                        verbe = "passe de" if b > a else "descend de"
+                        bouts.append(f"{joli(f)} {verbe} {N.pct(a, 0)} à "
+                                     f"{N.pct(b, 0)}")
+                    return " · ".join(bouts) or "aucun changement notable"
+
+                # ⚠️ CES TERRITOIRES EXISTENT-ILS ? On mesure l'écart à la
+                # commune réelle la plus proche, sur les seules variables
+                # modifiées. Mesuré sur Saint-Louis-et-Parahou : la commune
+                # elle-même est à 0,02 de son plus proche voisin, et les cinq
+                # scénarios entre 0,64 et 1,46. Aucun n'a d'équivalent en
+                # France, et l'un d'eux AUGMENTE le maquis tout en faisant
+                # baisser le risque, ce qui n'a pas de sens physique. Le
+                # modèle y extrapole hors de son domaine d'apprentissage.
+                ref = F[cols].to_numpy(dtype=float)
+                for i in range(len(apres)):
+                    d = float(np.abs(
+                        ref - apres.iloc[i].to_numpy(dtype=float)
+                    ).sum(axis=1).min())
+                    note = ("" if d < 0.15 else
+                            " · *territoire inhabituel*" if d < 0.4 else
+                            " · **aucun territoire français comparable**")
+                    st.markdown(f"**Scénario {i + 1}** — "
+                                + raconte(apres.iloc[i]) + note)
+
+                T = pd.DataFrame({
+                    "Ce qu'on change": [joli(f) for f in cols],
+                    "Aujourd'hui": [N.pct(avant[f], 0) for f in cols]})
+                for i in range(len(apres)):
+                    T[f"Scén. {i + 1}"] = [N.pct(apres.iloc[i][f], 0)
+                                           for f in cols]
+                st.dataframe(T, width="stretch", hide_index=True)
                 st.caption(
-                    "Chaque ligne est un scénario alternatif : la variation à "
-                    "appliquer pour que la commune sorte du décile le plus à "
-                    "risque."
+                    "Chaque colonne est un territoire alternatif que le modèle "
+                    "classerait hors du décile à risque. Les pourcentages sont "
+                    "des parts du territoire communal."
                     + (f" {ecretes} des {proposes} scénarios rendus par DiCE "
-                       f"portaient une part au-delà de 100 % du territoire : "
-                       f"ramenés à 100 %, puis revérifiés comme basculant "
-                       f"toujours." if ecretes else ""))
+                       f"portaient une part au-delà de 100 % : ramenés à "
+                       f"100 %, puis revérifiés comme basculant toujours."
+                       if ecretes else ""))
         st.warning("""
 Un contrefactuel n'est pas une recommandation. DiCE trouve un point proche que
 le modèle classe différemment, sans garantir qu'il soit réalisable : on ne
@@ -668,12 +706,21 @@ convertit pas 40 % de maquis en terres agricoles. Rien ne garantit non plus que
 le lien soit causal, le modèle ayant appris des corrélations sur 2006-2019 et
 non des mécanismes.
 
-Une limite plus technique, visible dans les tableaux ci-dessus : DiCE fait
-varier **chaque part indépendamment**, sans savoir qu'elles décrivent le même
-territoire. Un scénario peut donc retirer 48 points de forêt et ajouter
-99 points de terres agricoles sans que la somme reste cohérente. Les parts
-sont désormais bornées à 100 %, mais leur cohérence mutuelle n'est pas
-imposée. Ces scénarios se lisent comme des directions, pas comme des plans.
+La mention « aucun territoire français comparable » est une mesure, pas une
+formule de prudence : c'est la distance à la commune réelle la plus proche,
+calculée sur les seules variables modifiées. Sur l'exemple de
+Saint-Louis-et-Parahou, la commune est à 0,02 de sa voisine la plus proche et
+les cinq scénarios entre 0,64 et 1,46. **Aucun n'existe.**
+
+C'est la limite la plus profonde de l'exercice. DiCE fait varier chaque part
+indépendamment, sans savoir qu'elles décrivent le même territoire : un
+scénario peut porter les terres agricoles à 100 % en gardant 74 % de forêt,
+soit 174 % de territoire. Un autre **augmente** le maquis tout en faisant
+baisser le risque, ce qui n'a aucun sens physique. Le modèle y répond quand
+même, parce qu'on l'interroge loin de tout ce qu'il a vu pendant son
+apprentissage.
+
+Ces scénarios se lisent donc comme des directions, jamais comme des plans.
 """)
     except ImportError:
         st.warning("`dice-ml` n'est pas installé : `uv pip install dice-ml`.")
