@@ -235,10 +235,19 @@ st.divider()
 # ════════════════════════════════════════════════════════════════════════
 st.markdown("## Une commune, un jour : trois façons d'expliquer le même score")
 
+# ⚠️ ON N'ÉCRIT PAS DANS LA CLÉ D'UN WIDGET DÉJÀ INSTANCIÉ.
+# Streamlit lève StreamlitAPIException si l'on affecte
+# `st.session_state["q_expl"]` après création du text_input portant cette
+# clé — ce qui faisait planter le bouton « trouver une commune où la
+# recherche aboutit ». La valeur suggérée vit donc dans une clé à part, et
+# on fait VARIER la clé du widget pour qu'il reparte de cette valeur.
+# Même parade que pour la caméra pydeck de la page Carte.
+st.session_state.setdefault("commune_expl", "Bormes-les-Mimosas")
 s1, s2, s3 = st.columns([2, 1, 1])
 with s1:
-    q = st.text_input("Commune ou code postal", "Bormes-les-Mimosas",
-                      key="q_expl")
+    q = st.text_input("Commune ou code postal",
+                      st.session_state["commune_expl"],
+                      key=f"q_expl_{st.session_state['commune_expl']}")
 with s2:
     mois = st.selectbox("Mois", range(1, 13), index=7,
                         format_func=lambda m: N.MOIS[m - 1])
@@ -528,8 +537,8 @@ traduise en décision.
                     # rend cinq. Une commune trop enfoncée dans le décile est
                     # un mauvais candidat même quand une issue existe.
                     bons = bons.sort_values("score")
-                    st.session_state["q_expl"] = \
-                        bons.iloc[len(bons) // 2].nom
+                    st.session_state["commune_expl"] = \
+                        str(bons.iloc[len(bons) // 2].nom)
                     st.rerun()
                 else:
                     st.info("Aucune commune ne convient pour cette date et ces "
