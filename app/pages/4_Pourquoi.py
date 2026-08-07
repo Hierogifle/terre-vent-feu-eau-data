@@ -424,6 +424,16 @@ traduise en décision.
         donnees = dice_ml.Data(dataframe=F, continuous_features=FEATURES,
                                outcome_name=cible)
         PARTS = [f for f in FEATURES if f.startswith("part_")]
+        # ⚠️ LA SURFACE D'UNE COMMUNE FAIT 100 %, PAS DAVANTAGE.
+        # Ces neuf postes sont DISJOINTS : leur somme vaut au plus 100 %.
+        # Vérifié sur les 30 000 communes du fond — médiane 100,0 %,
+        # maximum 100,0 %, aucune au-dessus de 100,5 %.
+        # `part_foret` et `part_combustible` en sont ABSENTS : ce sont des
+        # agrégats qui recoupent les autres, les additionner double-compte.
+        DISJOINTS = ["part_feuillus", "part_coniferes", "part_melangees",
+                     "part_landes", "part_maquis", "part_veg_mutation",
+                     "part_veg_clairsemee", "part_agricole",
+                     "part_artificialise"]
         enveloppe = SeuilPercentile(N.modele("C"), seuil)
         mod = dice_ml.Model(model=enveloppe, backend="sklearn")
         moteur = Dice(donnees, mod, method="random")
@@ -572,7 +582,7 @@ traduise en décision.
             # n'est plus celui que DiCE a validé, et l'afficher sans contrôle
             # reviendrait à montrer un faux contrefactuel. Mesuré : les cinq
             # scénarios de L'Estréchure basculent encore après écrêtage.
-            proposes = 0
+            proposes, impossibles = 0, 0
             if res is not None and len(res):
                 proposes = len(res)          # ce que DiCE a rendu, avant tri
                 classe = int(enveloppe.predict(x[FEATURES].astype(float))[0])
@@ -582,6 +592,17 @@ traduise en décision.
                 res[PARTS] = res[PARTS].clip(0.0, 1.0)
                 res = res[enveloppe.predict(
                     res[FEATURES].astype(float)) != classe]
+
+                # ⚠️ ON REJETTE LES TERRITOIRES DE PLUS DE 100 %.
+                # Borner chaque part à 1 ne suffit pas : DiCE fait varier les
+                # postes indépendamment, et leur somme dérape. Mesuré sur
+                # Saint-Louis-et-Parahou, les huit scénarios allaient de
+                # 178 % à 276 % du territoire communal. Sur Remollon, les
+                # cinq tiennent entre 38 % et 85 % et sont donc gardés.
+                if len(res):
+                    somme = res[DISJOINTS].sum(axis=1)
+                    impossibles = int((somme > 1.005).sum())
+                    res = res[somme <= 1.005]
             if res is None or not len(res):
                 # ⚠️ DIRE POURQUOI, PAS SEULEMENT QUE ÇA A ÉCHOUÉ.
                 # Le message se contentait d'annoncer l'absence de solution,
@@ -633,9 +654,19 @@ traduise en décision.
                         f"Aucune plantation ne fait entrer une commune dans le "
                         f"décile un jour où sa météo est clémente : c'est le "
                         f"vrai verrou ici.")
+                if impossibles:
+                    st.error(f"""
+DiCE a bien rendu {proposes} scénarios, mais **tous les {impossibles} qui
+sortaient sa validation décrivent des territoires impossibles** : la somme des
+postes d'occupation du sol y dépasse 100 % de la surface communale.
+
+Une commune fait 100 %, pas davantage. DiCE fait varier chaque poste
+indépendamment, sans savoir qu'ils décrivent le même territoire, et rien dans
+la bibliothèque ne permet de lui imposer cette contrainte. Ces scénarios sont
+donc écartés plutôt qu'affichés.
+""")
                 st.error(f"""
-Aucun contrefactuel trouvé, et ce n'est pas une panne. Trois quantités
-l'expliquent.
+Aucun contrefactuel exploitable. Trois quantités l'expliquent.
 
 **L'écart à franchir.** {phrase_ecart}
 
@@ -698,7 +729,11 @@ l'expliquent.
                     + (f" {ecretes} des {proposes} scénarios rendus par DiCE "
                        f"portaient une part au-delà de 100 % : ramenés à "
                        f"100 %, puis revérifiés comme basculant toujours."
-                       if ecretes else ""))
+                       if ecretes else "")
+                    + (f" {impossibles} autres ont été écartés : la somme de "
+                       f"leurs postes dépassait 100 % du territoire communal, "
+                       f"ce qu'aucune commune réelle ne fait."
+                       if impossibles else ""))
         st.warning("""
 Un contrefactuel n'est pas une recommandation. DiCE trouve un point proche que
 le modèle classe différemment, sans garantir qu'il soit réalisable : on ne
@@ -712,15 +747,20 @@ calculée sur les seules variables modifiées. Sur l'exemple de
 Saint-Louis-et-Parahou, la commune est à 0,02 de sa voisine la plus proche et
 les cinq scénarios entre 0,64 et 1,46. **Aucun n'existe.**
 
-C'est la limite la plus profonde de l'exercice. DiCE fait varier chaque part
-indépendamment, sans savoir qu'elles décrivent le même territoire : un
-scénario peut porter les terres agricoles à 100 % en gardant 74 % de forêt,
-soit 174 % de territoire. Un autre **augmente** le maquis tout en faisant
-baisser le risque, ce qui n'a aucun sens physique. Le modèle y répond quand
-même, parce qu'on l'interroge loin de tout ce qu'il a vu pendant son
-apprentissage.
+DiCE fait varier chaque poste d'occupation du sol indépendamment, sans savoir
+qu'ils décrivent le même territoire, et la bibliothèque n'offre aucun moyen de
+lui imposer une contrainte entre variables. Ses scénarios portaient donc les
+terres agricoles à 100 % tout en gardant 74 % de forêt, soit 174 % de surface
+communale.
 
-Ces scénarios se lisent donc comme des directions, jamais comme des plans.
+Une commune fait 100 %. **Les scénarios qui dépassent sont désormais écartés**,
+sur la base d'un invariant vérifié : sur les 30 000 communes du fond, la somme
+des neuf postes disjoints vaut au plus 100,0 %. Le nombre de scénarios rejetés
+est annoncé à chaque recherche.
+
+Reste ce qu'aucun filtre ne corrige : le modèle a appris des corrélations sur
+2006-2019, pas des mécanismes. Ces scénarios se lisent comme des directions,
+jamais comme des plans.
 """)
     except ImportError:
         st.warning("`dice-ml` n'est pas installé : `uv pip install dice-ml`.")
